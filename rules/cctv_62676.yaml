@@ -1,0 +1,16 @@
+# PN-EN 62676 — systemy dozoru wizyjnego (CCTV) + kryteria DORI.
+# DORI [px/m]: Detection 25 / Observation 62,5 / Recognition 125 / Identification 250.
+norm: "PN-EN 62676"
+version: "2020"
+system: cctv
+rules:
+  - id: cctv.dori.target
+    appliesTo: device
+    severity: warn
+    reference: "PN-EN 62676-4 — kryteria DORI"
+    message: "Kamera nie spełnia zadeklarowanego poziomu DORI dla strefy"
+    predicate:
+      kind: cmp
+      op: ">="
+      left: { kind: call, fn: dori, args: [{ kind: field, path: device }] }
+      right: { kind: field, path: device.props.doriTarget }

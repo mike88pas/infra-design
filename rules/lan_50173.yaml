@@ -1,0 +1,16 @@
+# PN-EN 50173 / ISO/IEC 11801 — okablowanie strukturalne (LAN).
+# RuleSet ładowany przez NormEngine. Predykaty w mini-DSL (AST), bez kodu.
+norm: "PN-EN 50173"
+version: "2018"
+system: lan
+rules:
+  - id: lan.channel.length
+    appliesTo: route
+    severity: error
+    reference: "PN-EN 50173-1, kanał stały ≤ 90 m (+10 m sznury = łącze 100 m)"
+    message: "Długość kanału stałego przekracza 90 m"
+    predicate:
+      kind: cmp
+      op: "<="
+      left: { kind: call, fn: routeLength, args: [{ kind: field, path: route }] }
+      right: { kind: const, value: 90 }
