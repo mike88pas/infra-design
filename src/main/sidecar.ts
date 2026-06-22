@@ -13,6 +13,7 @@
 import { spawn, type ChildProcessWithoutNullStreams } from 'node:child_process'
 import { existsSync } from 'node:fs'
 import { join } from 'node:path'
+import type { DxfDocument, PolygonizeResult } from '@domain/model/schema'
 
 export interface SidecarOptions {
   /** Katalog z kodem sidecara (server.py). */
@@ -125,6 +126,21 @@ export class SidecarBridge {
   /** Handshake F0 — sidecar zwraca { pong: true, ezdxf, python }. */
   ping(): Promise<{ pong: boolean; ezdxf: string; python: string }> {
     return this.request('ping')
+  }
+
+  /** Import rzutu DXF → warstwy + encje + bbox (timeout dłuższy: ciężkie pliki). */
+  importDxf(path: string): Promise<DxfDocument> {
+    return this.request('import_dxf', { path }, 120_000)
+  }
+
+  /** Wykrycie pomieszczeń z segmentów ścian (Shapely polygonize). */
+  polygonize(params: {
+    path: string
+    wallLayers?: string[]
+    snap?: number
+    minArea?: number
+  }): Promise<PolygonizeResult> {
+    return this.request('polygonize', params, 120_000)
   }
 
   stop(): void {

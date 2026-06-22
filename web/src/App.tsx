@@ -1,0 +1,247 @@
+import { useMemo, useState } from 'react'
+import type { DxfDocument } from '@domain/model/schema'
+import { CadViewer } from '@core/cad/CadViewer'
+import type { RenderSpace } from '@core/cad'
+import { guessLayerRole } from '@domain/dxf/layerMapping'
+import sampleData from './data/sample-floor.json'
+
+const sample = sampleData as unknown as { doc: DxfDocument; spaces: RenderSpace[] }
+
+// Ukryj warstwy z opisami DXF — czyste etykiety (nazwa + m²) z renderera nie
+// dublują się wtedy z oryginalnym tekstem rzutu.
+const DEMO_LAYER_VIS: Record<string, boolean> = Object.fromEntries(
+  sample.doc.layers.map((l) => [l.name, guessLayerRole(l.name) !== 'text'])
+)
+
+const SYSTEMS = [
+  { key: 'LAN', live: true },
+  { key: 'CCTV', live: true },
+  { key: 'SAP / PPOŻ', live: false },
+  { key: 'DSO', live: false },
+  { key: 'SSWiN', live: false },
+  { key: 'KD', live: false },
+  { key: 'Trasy kablowe', live: false },
+  { key: 'Elektryka', live: false },
+  { key: 'Automatyka / BMS', live: false }
+]
+
+const ROADMAP = [
+  { ph: 'F0', t: 'Szkielet aplikacji, model danych, paczka projektu', done: true },
+  { ph: 'F1', t: 'Import DXF, renderer rzutu, wykrywanie pomieszczeń', done: true },
+  { ph: 'F2', t: 'Plugin LAN: palety, punkty, trasy, długości, BOM', done: false },
+  { ph: 'F3', t: 'Kosztorys (KNR + cennik), eksport PDF/XLS/Word — PILOT', done: false },
+  { ph: 'F4', t: 'CCTV (FOV/DORI), auto-routing, widok szafy rack', done: false },
+  { ph: 'F5', t: 'Walidacja norm (PN-EN) z odnośnikami', done: false }
+]
+
+export function App(): JSX.Element {
+  const [hovered, setHovered] = useState<RenderSpace | null>(null)
+  const totalArea = useMemo(
+    () => sample.spaces.reduce((s, sp) => s + sp.area, 0) / 1_000_000,
+    []
+  )
+
+  return (
+    <>
+      <nav className="nav">
+        <div className="wrap">
+          <div className="brand">
+            Infra<span>Design</span>
+          </div>
+          <div className="nav-links">
+            <a href="#problem">Problem</a>
+            <a href="#jak">Jak działa</a>
+            <a href="#demo">Demo</a>
+            <a href="#roadmapa">Roadmapa</a>
+          </div>
+          <a className="btn" href="#kontakt">
+            Umów prezentację
+          </a>
+        </div>
+      </nav>
+
+      <header className="hero">
+        <div className="wrap">
+          <span className="eyebrow">Technical preview · Pilot: LAN + CCTV</span>
+          <h1>
+            Od rzutu <span className="grad">DXF</span> do gotowej oferty
+            <br /> instalacji budynkowych
+          </h1>
+          <p className="lead">
+            Wczytaj rzut, nanieś instalacje, sprawdź normy i wygeneruj BOM oraz kosztorys
+            inwestorski. Jedno narzędzie zamiast AutoCAD-a, Excela i programu kosztorysowego —
+            wspomaga projektanta z uprawnieniami.
+          </p>
+          <div className="cta-row">
+            <a className="btn" href="#demo">
+              Zobacz interaktywne demo
+            </a>
+            <a className="btn ghost" href="#kontakt">
+              Porozmawiajmy o wdrożeniu
+            </a>
+          </div>
+        </div>
+      </header>
+
+      <section className="block" id="problem">
+        <div className="wrap">
+          <h2 className="section-title">Dziś projekt instalacji to żonglerka narzędziami</h2>
+          <p className="section-sub">
+            Rysunek w jednym programie, zestawienie materiału ręcznie w Excelu, kosztorys w
+            kolejnym, a zgodność z normami „na pamięć". Każda zmiana = przeklejanie i błędy.
+          </p>
+          <div className="grid">
+            <div className="card">
+              <div className="ico">🧩</div>
+              <h3>Rozproszone dane</h3>
+              <p>Rzut, materiały, kosztorys i normy żyją w osobnych plikach i nie wiedzą o sobie.</p>
+            </div>
+            <div className="card">
+              <div className="ico">⏱️</div>
+              <h3>Czasochłonność</h3>
+              <p>Liczenie długości tras, ilości punktów i przedmiaru ręcznie pochłania godziny.</p>
+            </div>
+            <div className="card">
+              <div className="ico">⚠️</div>
+              <h3>Ryzyko błędu</h3>
+              <p>Brak walidacji norm (dł. kanału LAN, DORI dla CCTV) wychodzi dopiero na budowie.</p>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section className="block" id="jak">
+        <div className="wrap">
+          <h2 className="section-title">Jak to działa</h2>
+          <p className="section-sub">
+            Wspólny model danych spina rysunek, instalacje, normy i kosztorys. Zmiana w jednym
+            miejscu propaguje się wszędzie.
+          </p>
+          <div className="steps">
+            <div className="step">
+              <h3>Import rzutu</h3>
+              <p>Wczytujesz DXF; aplikacja rozpoznaje warstwy i automatycznie wykrywa pomieszczenia.</p>
+            </div>
+            <div className="step">
+              <h3>Naniesienie instalacji</h3>
+              <p>Z palety stawiasz punkty (gniazda, kamery), prowadzisz trasy — długości liczą się same.</p>
+            </div>
+            <div className="step">
+              <h3>Walidacja norm</h3>
+              <p>Silnik reguł sprawdza zgodność z PN-EN i podaje odnośnik do punktu normy.</p>
+            </div>
+            <div className="step">
+              <h3>BOM i kosztorys</h3>
+              <p>Z modelu powstaje zestawienie materiału i kosztorys; eksport do PDF/XLS/Word/DXF.</p>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section className="block" id="demo">
+        <div className="wrap">
+          <h2 className="section-title">Interaktywne demo — wykrywanie pomieszczeń z rzutu</h2>
+          <p className="section-sub">
+            Poniższy rzut został wczytany z pliku DXF tym samym silnikiem, co w aplikacji desktop.
+            Pomieszczenia wykryto automatycznie z geometrii ścian. Przeciągaj, przybliżaj kółkiem,
+            najedź na pomieszczenie.
+          </p>
+          <div className="demo-frame">
+            <div className="demo-bar">
+              <span>
+                sample-floor.dxf · <span className="pill">{sample.doc.entityCount} encji</span>{' '}
+                <span className="pill">{sample.spaces.length} pomieszczeń</span>{' '}
+                <span className="pill">{totalArea.toFixed(1)} m²</span>
+              </span>
+              <span>
+                {hovered ? (
+                  <strong style={{ color: 'var(--accent)' }}>
+                    {hovered.name} — {(hovered.area / 1_000_000).toFixed(1)} m²
+                  </strong>
+                ) : (
+                  'najedź na pomieszczenie →'
+                )}
+              </span>
+            </div>
+            <CadViewer
+              doc={sample.doc}
+              spaces={sample.spaces}
+              layerVisibility={DEMO_LAYER_VIS}
+              onHoverSpace={setHovered}
+              className="demo-canvas"
+            />
+          </div>
+          <p className="demo-hint">
+            To wczesna wersja techniczna (renderer rdzenia CAD). W aplikacji desktop dochodzą:
+            naniesienie urządzeń, trasowanie, walidacja norm, BOM i kosztorys.
+          </p>
+        </div>
+      </section>
+
+      <section className="block" id="systemy">
+        <div className="wrap">
+          <h2 className="section-title">Systemy instalacji</h2>
+          <p className="section-sub">
+            Rdzeń CAD jest generyczny; instalacje to pierwsza wertykała. Pilot obejmuje LAN i CCTV,
+            kolejne systemy dochodzą jako wtyczki — bez przebudowy aplikacji.
+          </p>
+          <div className="systems">
+            {SYSTEMS.map((s) => (
+              <span key={s.key} className={`sys${s.live ? ' live' : ''}`}>
+                {s.live ? '● ' : '○ '}
+                {s.key}
+              </span>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      <section className="block" id="roadmapa">
+        <div className="wrap">
+          <h2 className="section-title">Roadmapa</h2>
+          <p className="section-sub">
+            Kamień milowy komercyjny: koniec fazy F3 — pierwsza pełna oferta wygenerowana z rzutu
+            DXF u firmy-pilota.
+          </p>
+          <div className="road">
+            {ROADMAP.map((r) => (
+              <div key={r.ph} className={`row${r.done ? ' done' : ''}`}>
+                <div className="ph">
+                  {r.ph} {r.done ? '✓' : ''}
+                </div>
+                <div>{r.t}</div>
+              </div>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      <section className="block" id="kontakt">
+        <div className="wrap">
+          <h2 className="section-title">Porozmawiajmy o wdrożeniu</h2>
+          <p className="section-sub">
+            Szukamy firmy-pilota (instalacje niskoprądowe / elektryka), z którą dopracujemy import
+            realnych rzutów i eksport kosztorysu w używanym formacie.
+          </p>
+          <div className="legal">
+            <p style={{ marginTop: 0 }}>
+              <strong style={{ color: 'var(--text)' }}>Zasada prawna:</strong> oprogramowanie
+              wspomaga projektanta — <em>nie podpisuje ani nie autoryzuje projektu</em>.
+              Dokumentację zatwierdza projektant z uprawnieniami budowlanymi (PIIB); dokument
+              zawiera pola projektanta i miejsce na podpis.
+            </p>
+            <p style={{ marginBottom: 0 }}>
+              Kontakt: <a href="mailto:mpasterczyk@gmail.com">mpasterczyk@gmail.com</a>
+            </p>
+          </div>
+        </div>
+      </section>
+
+      <footer>
+        <div className="wrap">
+          Infra Design · technical preview {new Date().getFullYear()} · The Best Agency
+        </div>
+      </footer>
+    </>
+  )
+}

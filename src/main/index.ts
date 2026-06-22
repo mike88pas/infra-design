@@ -98,6 +98,30 @@ function registerIpc(): void {
     const bundle = await loadProject(target)
     return { opened: true, filePath: target, bundle }
   })
+
+  // Import rzutu DXF (z dialogiem jeśli brak ścieżki) → DxfDocument.
+  ipcMain.handle('dxf:import', async (_e, filePath?: string) => {
+    let target = filePath
+    if (!target) {
+      const res = await dialog.showOpenDialog(mainWindow!, {
+        title: 'Importuj rzut DXF',
+        properties: ['openFile'],
+        filters: [{ name: 'DXF', extensions: ['dxf'] }]
+      })
+      if (res.canceled || !res.filePaths.length) return { imported: false }
+      target = res.filePaths[0]
+    }
+    const doc = await getSidecar().importDxf(target)
+    return { imported: true, filePath: target, doc }
+  })
+
+  // Wykrycie pomieszczeń z DXF (Shapely polygonize) → DetectedPolygon[].
+  ipcMain.handle(
+    'dxf:polygonize',
+    async (_e, params: { path: string; wallLayers?: string[]; snap?: number; minArea?: number }) => {
+      return getSidecar().polygonize(params)
+    }
+  )
 }
 
 app.whenReady().then(() => {

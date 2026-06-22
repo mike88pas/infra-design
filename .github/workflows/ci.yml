@@ -40,10 +40,12 @@ jobs:
         with:
           python-version: '3.12'
       - name: Install sidecar deps
-        run: pip install -r sidecar/requirements.txt
+        run: pip install -r sidecar/requirements.txt pytest
       - name: Sidecar handshake smoke test
         shell: pwsh
         run: |
           $out = '{"id":1,"method":"ping"}' | python sidecar/geometry/server.py
           Write-Host $out
           if ($out -notmatch '"pong":\s*true') { exit 1 }
+      - name: Sidecar contract tests (import_dxf / polygonize)
+        run: python -m pytest sidecar/tests -q

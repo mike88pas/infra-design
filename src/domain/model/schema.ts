@@ -124,6 +124,55 @@ export interface Project {
 }
 
 // ──────────────────────────────────────────────────────────────────────────
+// IMPORT DXF (transport sidecar → front) — geometria do renderowania
+// ──────────────────────────────────────────────────────────────────────────
+//
+// To NIE są encje persystowane w paczce `.infra` (te trzyma Drawing + osadzony
+// DXF w sourceDxfRef). To lekki, renderowalny zrzut z ezdxf: tagowana unia encji
+// w jednostkach modelu DXF. Renderer (src/core/cad) i sidecar dzielą ten kontrakt.
+
+/** Encja DXF spłaszczona do renderowania (kąty łuków w stopniach, CCW). */
+export type DxfEntity =
+  | { t: 'line'; layer: string; a: Point; b: Point }
+  | { t: 'polyline'; layer: string; pts: Point[]; closed: boolean }
+  | { t: 'circle'; layer: string; c: Point; r: number }
+  | { t: 'arc'; layer: string; c: Point; r: number; start: number; end: number }
+  | { t: 'insert'; layer: string; at: Point; name: string; rotation: number; sx: number; sy: number }
+  | { t: 'text'; layer: string; at: Point; text: string; height: number }
+
+export interface DxfLayer {
+  name: string
+  /** Kolor warstwy jako hex (#rrggbb) — z indeksu ACI lub true-color DXF. */
+  color: string
+  visible: boolean
+}
+
+/** Wynik metody sidecara `import_dxf`. */
+export interface DxfDocument {
+  layers: DxfLayer[]
+  entities: DxfEntity[]
+  bbox: BBox
+  units: Units
+  /** Liczba encji (także po ewentualnym przycięciu dużych plików). */
+  entityCount: number
+  /** Jeśli sidecar przyciął encje (ochrona pamięci) — ile pominięto. */
+  truncated?: number
+}
+
+/** Pojedynczy wykryty wielobok pomieszczenia (przed nadaniem Id po stronie TS). */
+export interface DetectedPolygon {
+  points: Point[]
+  area: number
+}
+
+/** Wynik metody sidecara `polygonize` — surowe wieloboki (TS → Space[]). */
+export interface PolygonizeResult {
+  polygons: DetectedPolygon[]
+  /** Tolerancja snapowania użyta do domknięcia narożników (jedn. modelu). */
+  snapTolerance: number
+}
+
+// ──────────────────────────────────────────────────────────────────────────
 // WERTYKAŁA: INSTALACJE
 // ──────────────────────────────────────────────────────────────────────────
 

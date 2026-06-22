@@ -4,12 +4,24 @@
  */
 
 import { contextBridge, ipcRenderer } from 'electron'
-import type { ProjectBundle } from '@domain/model/schema'
+import type { ProjectBundle, DxfDocument, PolygonizeResult } from '@domain/model/schema'
 
 const api = {
   sidecar: {
     ping: (): Promise<{ pong: boolean; ezdxf: string; python: string }> =>
       ipcRenderer.invoke('sidecar:ping')
+  },
+  dxf: {
+    import: (
+      filePath?: string
+    ): Promise<{ imported: boolean; filePath?: string; doc?: DxfDocument }> =>
+      ipcRenderer.invoke('dxf:import', filePath),
+    polygonize: (params: {
+      path: string
+      wallLayers?: string[]
+      snap?: number
+      minArea?: number
+    }): Promise<PolygonizeResult> => ipcRenderer.invoke('dxf:polygonize', params)
   },
   project: {
     new: (name: string): Promise<ProjectBundle> => ipcRenderer.invoke('project:new', name),
