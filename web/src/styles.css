@@ -308,3 +308,101 @@ footer {
   font-size: 13px;
   text-align: center;
 }
+
+/* ── Demo realnego projektu klienta ───────────────────────────────────────── */
+.client-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 18px;
+  margin-top: 24px;
+}
+@media (max-width: 760px) {
+  .client-grid {
+    grid-template-columns: 1fr;
+  }
+}
+.ctab {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 14px;
+}
+.ctab td {
+  padding: 6px 4px;
+  border-top: 1px solid var(--line);
+}
+.ctab td.muted {
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+.ctab td.num {
+  text-align: right;
+  color: var(--accent);
+  font-variant-numeric: tabular-nums;
+  width: 64px;
+}
+.ctab.full td {
+  font-size: 13px;
+}
+.ctab select {
+  width: 100%;
+  background: var(--panel2);
+  color: var(--text);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  padding: 4px 6px;
+  font-size: 13px;
+}
+.kpis {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 10px;
+  margin-bottom: 14px;
+}
+.kpis > div {
+  display: flex;
+  flex-direction: column;
+  background: var(--panel2);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 8px 10px;
+}
+.kpis b {
+  color: var(--accent);
+  font-size: 18px;
+}
+.kpis span {
+  color: var(--muted);
+  font-size: 11px;
+}
+.cost {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 8px 4px 0;
+  border-top: 1px solid var(--line);
+  margin-top: 8px;
+  color: var(--muted);
+}
+.cost b {
+  color: var(--text);
+  font-size: 16px;
+}
+.cost.grad b {
+  color: var(--accent);
+  font-size: 20px;
+}
+.client-rooms {
+  margin-top: 18px;
+}
+.client-rooms summary {
+  cursor: pointer;
+  color: var(--accent);
+  font-size: 14px;
+  padding: 8px 0;
+}
+.client-rooms .ctab {
+  margin-top: 8px;
+  max-height: 320px;
+  display: block;
+  overflow-y: auto;
+}
