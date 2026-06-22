@@ -1,6 +1,7 @@
 import { useMemo, useRef, useState } from 'react'
-import type { BomItem, Device, DxfDocument, ProjectBundle, Space } from '../../domain/model/schema'
+import type { BomItem, Device, DxfDocument, DxfRoom, Point, ProjectBundle, Space } from '../../domain/model/schema'
 import { createEmptyBundle, createEmptyProject } from '../../domain/model/schema'
+import { autoDesign } from '../../domain/installations/autodesign'
 import { CadViewer } from '@core/cad/CadViewer'
 import { polygonsToSpaces, type CadScene, type RenderSpace } from '@core/cad'
 import {
@@ -17,6 +18,12 @@ import { buildCost, PLN, type CostSummary } from '../../domain/installations/cos
 import { buildCableRoutes } from '../../domain/installations/routing'
 import { runAudit } from '../../domain/norms/audit'
 import { INSTALLATION_RULES } from '../../domain/norms/rules'
+
+/** Centroid wielokąta (do środka pomieszczenia z polygonize). */
+function centroid(pts: Point[]): Point {
+  const n = pts.length || 1
+  return { x: pts.reduce((s, p) => s + p.x, 0) / n, y: pts.reduce((s, p) => s + p.y, 0) / n }
+}
 
 interface ImportSummary {
   level: number
@@ -192,33 +199,31 @@ export default function App(): JSX.Element {
     setWizardOpen(false)
     const drawingId = `drw-${profile.level}`
     try {
-      // 1) Pomieszczenia — etykiety pól (czyste) lub rekonstrukcja ze ścian
+      // 1) Pomieszczenia jako DxfRoom[] — etykiety pól (czyste) lub rekonstrukcja ze ścian
       setStatus({ kind: 'idle', text: 'Wykrywam pomieszczenia…' })
-      let domainSpaces: Space[] = []
-      let assignToRoom: ((at: { x: number; y: number }) => string | undefined) | undefined
+      let rooms: DxfRoom[]
       if (profile.roomSource === 'area') {
         const rr = await window.infra.dxf.extractRooms({
           path: dxfPath,
           areaLayers: profile.areaLayers,
           explodeBlocks: profile.explodeBlocks
         })
-        const rs = roomsToSpaces(rr.rooms, drawingId)
-        domainSpaces = rs.spaces
-        assignToRoom = rs.assign
+        rooms = rr.rooms
       } else {
         const poly = await window.infra.dxf.polygonize({
           path: dxfPath,
           wallLayers: profile.wallLayers,
           explodeBlocks: profile.explodeBlocks
         })
-        domainSpaces = poly.polygons.map((p, i) => ({
-          id: `${drawingId}::room::${i + 1}`,
-          drawingId,
+        rooms = poly.polygons.map((p, i) => ({
+          number: '',
           name: `Pom. ${i + 1}`,
-          polygon: p.points,
-          area: p.area
+          areaM2: p.area / 1_000_000,
+          at: centroid(p.points),
+          tag: p.points
         }))
       }
+      const { spaces: domainSpaces, assign: assignToRoom } = roomsToSpaces(rooms, drawingId)
       const renderSpaces: RenderSpace[] = domainSpaces.map((s) => ({
         id: s.id,
         name: s.name,
@@ -227,37 +232,47 @@ export default function App(): JSX.Element {
       }))
       setSpaces(renderSpaces)
 
-      // 2) Urządzenia z symboli DXF wg mapowania warstw (+ przypisanie do pomieszczeń)
-      setStatus({ kind: 'idle', text: 'Wyciągam urządzenia…' })
-      const ext = await window.infra.dxf.extractDevices({ path: dxfPath })
-      const devices = devicesFromInserts(ext.inserts, profile.systemMapping, {
-        drawingId,
-        idPrefix: `L${profile.level}`,
-        spaceOf: assignToRoom
-      })
+      // 2) Urządzenia: odczyt naniesionych (extract) albo auto-projektowanie (autodesign)
+      let devices: Device[]
+      let targets: Point[] = []
+      let cabinetIds: string[] = []
+      if (profile.mode === 'autodesign') {
+        setStatus({ kind: 'idle', text: 'Projektuję instalację (auto-design)…' })
+        const ad = autoDesign(rooms, {
+          drawingId,
+          idPrefix: `L${profile.level}`,
+          rules: { lan: { m2PerOutlet: profile.autoM2PerOutlet, minPerRoom: 1 } }
+        })
+        devices = ad.devices
+        targets = ad.cabinets.map((c) => c.at)
+        cabinetIds = ad.cabinets.map((c) => c.id)
+      } else {
+        setStatus({ kind: 'idle', text: 'Wyciągam urządzenia…' })
+        const ext = await window.infra.dxf.extractDevices({ path: dxfPath })
+        devices = devicesFromInserts(ext.inserts, profile.systemMapping, {
+          drawingId,
+          idPrefix: `L${profile.level}`,
+          spaceOf: assignToRoom
+        })
+        const cab = await window.infra.dxf.extractDevices({ path: dxfPath, layers: profile.targetLayers })
+        targets = cab.inserts.map((c) => c.at)
+        cabinetIds = cab.inserts.map((_, i) => `rack-${profile.level}-${i}`)
+      }
 
       // 3) Trasowanie kabli A* (opcjonalne) → CableRoute[]
       let routes: ReturnType<typeof buildCableRoutes> = []
       let routedAstar = 0
-      if (profile.doRouting && devices.length) {
+      if (profile.doRouting && devices.length && targets.length) {
         setStatus({ kind: 'idle', text: 'Trasuję kable (A*) — to może chwilę potrwać…' })
-        const cab = await window.infra.dxf.extractDevices({ path: dxfPath, layers: profile.targetLayers })
-        if (cab.inserts.length) {
-          const rc = await window.infra.dxf.routeCables({
-            path: dxfPath,
-            sources: devices.map((d) => d.position),
-            targets: cab.inserts.map((c) => c.at),
-            wallLayers: profile.wallLayers,
-            explodeBlocks: profile.explodeBlocks
-          })
-          routedAstar = rc.routes.filter((r) => r.method === 'astar').length
-          routes = buildCableRoutes({
-            devices,
-            routes: rc.routes,
-            unitMm: profile.unitMm,
-            cabinetIds: cab.inserts.map((_, i) => `rack-${profile.level}-${i}`)
-          })
-        }
+        const rc = await window.infra.dxf.routeCables({
+          path: dxfPath,
+          sources: devices.map((d) => d.position),
+          targets,
+          wallLayers: profile.wallLayers,
+          explodeBlocks: profile.explodeBlocks
+        })
+        routedAstar = rc.routes.filter((r) => r.method === 'astar').length
+        routes = buildCableRoutes({ devices, routes: rc.routes, unitMm: profile.unitMm, cabinetIds })
       }
 
       // 4) BOM + kosztorys
@@ -427,7 +442,7 @@ export default function App(): JSX.Element {
           </button>
 
           <button onClick={importInstallations} className="rounded bg-emerald-400/15 px-4 py-2 text-sm font-medium text-emerald-300 hover:bg-emerald-400/25">
-            Importuj projekt + instalacje (kreator)
+            Importuj / Zaprojektuj instalacje (kreator)
           </button>
 
           {doc && (

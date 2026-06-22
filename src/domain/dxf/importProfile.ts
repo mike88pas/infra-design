@@ -36,7 +36,11 @@ export interface ImportProfile {
   explodeBlocks: boolean
 
   // ── Instalacje ──
-  /** Warstwa → system/typ urządzenia (null = pomiń). Do potwierdzenia w UI. */
+  /** Tryb: 'extract' = odczytaj naniesione urządzenia; 'autodesign' = zaprojektuj od zera. */
+  mode: 'extract' | 'autodesign'
+  /** Auto-design: gęstość gniazd LAN (1 gniazdo 2×RJ45 na N m²). */
+  autoM2PerOutlet: number
+  /** Warstwa → system/typ urządzenia (null = pomiń). Do potwierdzenia w UI (tryb extract). */
   systemMapping: LayerSystemMap
 
   // ── Trasowanie ──
@@ -88,6 +92,9 @@ export function buildDefaultProfile(input: DefaultProfileInput): ImportProfile {
     wallLayers: wall.length ? wall : ['WALL'],
     explodeBlocks: true,
     systemMapping: guessSystemMapping(input.layers),
+    // Tryb: gdy rysunek ma warstwy urządzeń (PST_…) → odczyt; inaczej projektuj od zera.
+    mode: Object.values(guessSystemMapping(input.layers)).some((m) => m !== null) ? 'extract' : 'autodesign',
+    autoM2PerOutlet: 10,
     doRouting: true,
     targetLayers: ['szaf', 'rack'],
     cableSparePct: 5,

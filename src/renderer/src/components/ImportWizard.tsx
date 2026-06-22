@@ -122,6 +122,31 @@ export function ImportWizard({ doc, fileName, initial, onConfirm, onCancel }: Im
             </Field>
           </section>
 
+          {/* Tryb pracy */}
+          <section className="space-y-2 rounded border border-accent/20 bg-accent/5 p-3">
+            <h3 className="font-semibold text-slate-300">Tryb</h3>
+            <div className="flex gap-4">
+              <label className="flex items-center gap-2">
+                <input type="radio" checked={profile.mode === 'extract'} onChange={() => set('mode', 'extract')} />
+                <span>Odczytaj naniesione urządzenia (gotowy projekt)</span>
+              </label>
+              <label className="flex items-center gap-2">
+                <input type="radio" checked={profile.mode === 'autodesign'} onChange={() => set('mode', 'autodesign')} />
+                <span>Zaprojektuj od zera (auto-design)</span>
+              </label>
+            </div>
+            {profile.mode === 'autodesign' && (
+              <Field label="Gęstość LAN: 1 gniazdo 2×RJ45 na ile m²">
+                <input
+                  type="number"
+                  className={inp}
+                  value={profile.autoM2PerOutlet}
+                  onChange={(e) => set('autoM2PerOutlet', Number(e.target.value))}
+                />
+              </Field>
+            )}
+          </section>
+
           {/* Geometria pomieszczeń */}
           <section className="space-y-2 rounded border border-white/10 p-3">
             <h3 className="font-semibold text-slate-300">Pomieszczenia</h3>
@@ -174,7 +199,8 @@ export function ImportWizard({ doc, fileName, initial, onConfirm, onCancel }: Im
             </Field>
           </section>
 
-          {/* Mapowanie warstw → systemy */}
+          {/* Mapowanie warstw → systemy (tylko tryb odczytu) */}
+          {profile.mode === 'extract' && (
           <section className="space-y-2 rounded border border-white/10 p-3">
             <div className="flex items-center justify-between">
               <h3 className="font-semibold text-slate-300">
@@ -202,6 +228,7 @@ export function ImportWizard({ doc, fileName, initial, onConfirm, onCancel }: Im
               {layerRows.length === 0 && <li className="text-slate-500">Brak rozpoznanych warstw — kliknij „pokaż wszystkie”.</li>}
             </ul>
           </section>
+          )}
 
           {/* Kosztorys */}
           <section className="grid grid-cols-3 gap-3">
@@ -220,7 +247,7 @@ export function ImportWizard({ doc, fileName, initial, onConfirm, onCancel }: Im
         <footer className="flex justify-end gap-2 border-t border-white/10 px-5 py-3">
           <button onClick={onCancel} className="rounded bg-white/10 px-4 py-2 text-xs hover:bg-white/15">Anuluj</button>
           <button onClick={() => onConfirm(profile)} className="rounded bg-accent/20 px-4 py-2 text-xs font-medium text-accent hover:bg-accent/30">
-            Importuj instalacje
+            {profile.mode === 'autodesign' ? 'Zaprojektuj instalację' : 'Importuj instalacje'}
           </button>
         </footer>
       </div>
