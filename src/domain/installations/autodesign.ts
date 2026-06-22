@@ -20,6 +20,8 @@ export interface AutoDesignRules {
   ap: { m2PerAp: number; minRoomArea: number }
   /** CCTV: kamera gdy pole ≥ minRoomArea lub nazwa pasuje do słów kluczowych. */
   cctv: { minRoomArea: number; nameKeywords: string[] }
+  /** Szafa/IDF: pomieszczenie teletechniczne po słowie kluczowym (cel tras). */
+  cabinet: { roomKeywords: string[] }
 }
 
 /** Domyślne reguły (dobre praktyki PL; nadpisywalne wytycznymi klienta). */
@@ -29,6 +31,9 @@ export const DEFAULT_AUTODESIGN_RULES: AutoDesignRules = {
   cctv: {
     minRoomArea: 40,
     nameKeywords: ['wejśc', 'wejsc', 'foyer', 'hol', 'korytarz', 'scena', 'magazyn', 'recepcj', 'klatka']
+  },
+  cabinet: {
+    roomKeywords: ['teletech', 'serwer', 'rozdzieln', 'it', 'gpd', 'lpd', 'telekom', 'elektryczn']
   }
 }
 
@@ -40,9 +45,19 @@ export interface AutoDesignOptions {
   spacing?: number
 }
 
+/** Szafa/IDF — cel tras kablowych (punkt zbiorczy okablowania). */
+export interface DesignCabinet {
+  id: Id
+  at: Point
+  spaceId?: Id
+  name: string
+}
+
 export interface AutoDesignResult {
   spaces: Space[]
   devices: Device[]
+  /** Szafy/IDF (cele tras). Na start jedna główna na kondygnację. */
+  cabinets: DesignCabinet[]
   /** Zestawienie decyzji per pomieszczenie (audyt/uzasadnienie dla projektanta). */
   perRoom: Array<{ spaceId: Id; name: string; areaM2: number | null; outlets: number; aps: number; cameras: number }>
 }
@@ -51,8 +66,25 @@ function mergeRules(p?: Partial<AutoDesignRules>): AutoDesignRules {
   return {
     lan: { ...DEFAULT_AUTODESIGN_RULES.lan, ...(p?.lan ?? {}) },
     ap: { ...DEFAULT_AUTODESIGN_RULES.ap, ...(p?.ap ?? {}) },
-    cctv: { ...DEFAULT_AUTODESIGN_RULES.cctv, ...(p?.cctv ?? {}) }
+    cctv: { ...DEFAULT_AUTODESIGN_RULES.cctv, ...(p?.cctv ?? {}) },
+    cabinet: { ...DEFAULT_AUTODESIGN_RULES.cabinet, ...(p?.cabinet ?? {}) }
   }
+}
+
+/** Wybiera lokalizację głównej szafy: pomieszczenie teletechniczne lub centroid. */
+function placeCabinet(rooms: DxfRoom[], spaces: Space[], rules: AutoDesignRules, drawingId: Id): DesignCabinet {
+  const idx = rooms.findIndex((r) => {
+    const n = (r.name ?? '').toLowerCase()
+    return rules.cabinet.roomKeywords.some((k) => n.includes(k))
+  })
+  if (idx >= 0) {
+    return { id: `${drawingId}::rack`, at: rooms[idx].at, spaceId: spaces[idx].id, name: `Szafa IDF — ${rooms[idx].name}` }
+  }
+  // centroid środków pomieszczeń
+  const n = rooms.length || 1
+  const cx = rooms.reduce((s, r) => s + r.at.x, 0) / n
+  const cy = rooms.reduce((s, r) => s + r.at.y, 0) / n
+  return { id: `${drawingId}::rack`, at: { x: cx, y: cy }, name: 'Szafa IDF (centroid)' }
 }
 
 /** Rozkłada `n` punktów w siatce wokół środka (draft pozycji). */
@@ -119,5 +151,6 @@ export function autoDesign(rooms: DxfRoom[], opts: AutoDesignOptions): AutoDesig
     perRoom.push({ spaceId: space.id, name: room.name, areaM2: room.areaM2, outlets, aps, cameras })
   })
 
-  return { spaces, devices, perRoom }
+  const cabinets = rooms.length ? [placeCabinet(rooms, spaces, rules, opts.drawingId)] : []
+  return { spaces, devices, cabinets, perRoom }
 }

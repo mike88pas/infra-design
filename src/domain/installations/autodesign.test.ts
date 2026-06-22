@@ -64,8 +64,31 @@ describe('autoDesign — layout z reguł', () => {
 })
 
 describe('DEFAULT_AUTODESIGN_RULES', () => {
-  it('ma reguły LAN/AP/CCTV', () => {
+  it('ma reguły LAN/AP/CCTV/szafa', () => {
     expect(DEFAULT_AUTODESIGN_RULES.lan.m2PerOutlet).toBeGreaterThan(0)
     expect(DEFAULT_AUTODESIGN_RULES.cctv.nameKeywords.length).toBeGreaterThan(0)
+    expect(DEFAULT_AUTODESIGN_RULES.cabinet.roomKeywords.length).toBeGreaterThan(0)
+  })
+})
+
+describe('autoDesign — stawianie szafy/IDF', () => {
+  it('stawia szafę w pomieszczeniu teletechnicznym (po nazwie)', () => {
+    const withTech: DxfRoom[] = [
+      ...rooms,
+      { number: '0.9', name: 'Pomieszczenie teletechniczne', areaM2: 6, at: { x: 500, y: 500 }, tag: [{ x: 0, y: 0 }] }
+    ]
+    const res = autoDesign(withTech, { drawingId: 'd1' })
+    expect(res.cabinets.length).toBe(1)
+    expect(res.cabinets[0].at).toEqual({ x: 500, y: 500 })
+    expect(res.cabinets[0].spaceId).toBeTruthy()
+    expect(res.cabinets[0].name).toContain('teletechniczne')
+  })
+
+  it('bez pomieszczenia teletechnicznego — szafa w centroidzie', () => {
+    const res = autoDesign(rooms, { drawingId: 'd1' })
+    expect(res.cabinets.length).toBe(1)
+    // centroid środków: (3000+10000+6000)/3, (4000+4000+8000)/3
+    expect(res.cabinets[0].at.x).toBeCloseTo(19000 / 3, 0)
+    expect(res.cabinets[0].name).toContain('centroid')
   })
 })
