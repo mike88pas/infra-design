@@ -51,8 +51,8 @@ describe('F1→F2 end-to-end: INSERT → Device → BOM → kosztorys', () => {
   it('kosztorys liczy się i jest dodatni (brutto > netto > 0)', () => {
     expect(cost.net).toBeGreaterThan(0)
     expect(cost.gross).toBeGreaterThan(cost.net)
-    // 3·(42+38) + 2·(410+65) + 2·(520+85) = 240 + 950 + 1210 = 2400 netto
-    expect(cost.net).toBeCloseTo(2400, 2)
+    // 3·(85+45) + 2·(470+70) + 2·(560+90) = 390 + 1080 + 1300 = 2770 netto
+    expect(cost.net).toBeCloseTo(2770, 2)
   })
 
   it('zachowuje audytowalność (sourceRefs po Id urządzeń)', () => {

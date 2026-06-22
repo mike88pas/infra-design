@@ -88,9 +88,9 @@ describe('buildCost — kosztorys z BOM', () => {
     expect(cost.gross).toBeGreaterThan(cost.net)
   })
 
-  it('konkretna pozycja: 3× gniazdo 2×RJ45 = 3·(42+38) = 240 zł', () => {
+  it('konkretna pozycja: 3× gniazdo 2×RJ45 = 3·(85+45) = 390 zł', () => {
     const outlet = cost.items.find((i) => i.bomItemId === 'bom.lan.outlet.2x')
-    expect(outlet?.total).toBe(240)
+    expect(outlet?.total).toBe(390)
   })
 })
 
