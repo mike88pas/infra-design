@@ -13,7 +13,25 @@
 import { spawn, type ChildProcessWithoutNullStreams } from 'node:child_process'
 import { existsSync } from 'node:fs'
 import { join } from 'node:path'
-import type { DxfDocument, ExtractDevicesResult, PolygonizeResult } from '@domain/model/schema'
+import type {
+  DxfDocument,
+  ExtractDevicesResult,
+  ExtractRoomsResult,
+  PolygonizeResult
+} from '@domain/model/schema'
+
+/** Punkt 2D w jednostkach modelu (parametry trasowania). */
+interface Pt {
+  x: number
+  y: number
+}
+
+/** Pojedyncza trasa z route_cables (kontrakt z sidecarem). */
+export interface SidecarRouteResult {
+  routes: Array<{ sourceIndex: number; targetIndex: number; path: Pt[]; length: number; method: 'astar' | 'straight' }>
+  cell: number
+  grid: { w: number; h: number }
+}
 
 export interface SidecarOptions {
   /** Katalog z kodem sidecara (server.py). */
@@ -151,6 +169,28 @@ export class SidecarBridge {
     includeAttribs?: boolean
   }): Promise<ExtractDevicesResult> {
     return this.request('extract_devices', params, 120_000)
+  }
+
+  /** Wykaz pomieszczeń z etykiet pól (numer/nazwa/metraż). */
+  extractRooms(params: {
+    path: string
+    areaLayers?: string[]
+    explodeBlocks?: boolean
+  }): Promise<ExtractRoomsResult> {
+    return this.request('extract_rooms', params, 120_000)
+  }
+
+  /** Trasowanie kabli A* od urządzeń do najbliższej szafy. */
+  routeCables(params: {
+    path: string
+    sources: Pt[]
+    targets: Pt[]
+    wallLayers?: string[]
+    explodeBlocks?: boolean
+    cell?: number
+    inflate?: number
+  }): Promise<SidecarRouteResult> {
+    return this.request('route_cables', params, 180_000)
   }
 
   stop(): void {

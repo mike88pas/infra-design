@@ -104,6 +104,17 @@ def make_nested(path):
     base.add_lwpolyline(_rect(0, 0, 6000, 8000), close=True, dxfattribs={"layer": "A-WALL"})
     base.add_lwpolyline(_rect(6000, 0, 8000, 8000), close=True, dxfattribs={"layer": "A-WALL"})
 
+    # Etykiety pól (jak A-AREA-IDEN klienta): ramka + MTEXT numer/nazwa/metraż.
+    # Pole z etykiety bywa oficjalne (nie równe geometrii) — tu 48 i 64 m².
+    for (cx, cy, num, name, area) in [
+        (3000, 4000, "0.1", "Sala A", "48.00 m²"),
+        (10000, 4000, "0.2", "Sala B", "64.00 m²"),
+    ]:
+        base.add_lwpolyline(_rect(cx - 500, cy - 300, 1000, 600), close=True, dxfattribs={"layer": "A-AREA-IDEN"})
+        # Osobne MTEXT-y (jak u klienta): numer / nazwa / pole.
+        for k, line in enumerate((num, name, area)):
+            base.add_mtext(line, dxfattribs={"layer": "A-AREA-IDEN", "char_height": 150}).set_location((cx, cy + 100 - k * 100))
+
     # Blok symbolu urządzenia z definicją atrybutów (IDFX/NR).
     dev = doc.blocks.new(name="DEV_RJ45")
     dev.add_circle((0, 0), 120, dxfattribs={"layer": "0"})

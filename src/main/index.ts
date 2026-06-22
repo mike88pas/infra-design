@@ -133,6 +133,33 @@ function registerIpc(): void {
       return getSidecar().extractDevices(params)
     }
   )
+
+  // Wykaz pomieszczeń z etykiet pól → ExtractRoomsResult.
+  ipcMain.handle(
+    'dxf:extractRooms',
+    async (_e, params: { path: string; areaLayers?: string[]; explodeBlocks?: boolean }) => {
+      return getSidecar().extractRooms(params)
+    }
+  )
+
+  // Trasowanie kabli A* (urządzenia → szafy) → SidecarRouteResult.
+  ipcMain.handle(
+    'dxf:routeCables',
+    async (
+      _e,
+      params: {
+        path: string
+        sources: { x: number; y: number }[]
+        targets: { x: number; y: number }[]
+        wallLayers?: string[]
+        explodeBlocks?: boolean
+        cell?: number
+        inflate?: number
+      }
+    ) => {
+      return getSidecar().routeCables(params)
+    }
+  )
 }
 
 app.whenReady().then(() => {

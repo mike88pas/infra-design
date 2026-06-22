@@ -1,5 +1,6 @@
 import { useMemo, useRef, useState } from 'react'
-import type { BomItem, DxfDocument, ProjectBundle } from '../../domain/model/schema'
+import type { BomItem, Device, DxfDocument, ProjectBundle, Space } from '../../domain/model/schema'
+import { createEmptyBundle, createEmptyProject } from '../../domain/model/schema'
 import { CadViewer } from '@core/cad/CadViewer'
 import { polygonsToSpaces, type CadScene, type RenderSpace } from '@core/cad'
 import {
@@ -9,15 +10,20 @@ import {
 } from '../../domain/dxf/layerMapping'
 import { ImportWizard } from './components/ImportWizard'
 import type { ImportProfile } from '../../domain/dxf/importProfile'
+import { roomsToSpaces } from '../../domain/dxf/rooms'
 import { devicesFromInserts, countByTypeKey } from '../../domain/installations/fromDxf'
 import { buildBom } from '../../domain/installations/bom'
 import { buildCost, PLN, type CostSummary } from '../../domain/installations/cost'
+import { buildCableRoutes } from '../../domain/installations/routing'
 
 interface ImportSummary {
   level: number
   spaces: number
+  roomAreaM2: number
   devices: number
   byType: Record<string, number>
+  cableM: number
+  routedAstar: number
   bom: BomItem[]
   cost: CostSummary
 }
@@ -177,48 +183,156 @@ export default function App(): JSX.Element {
     }
   }
 
-  /** Po potwierdzeniu profilu: pomieszczenia + urządzenia → BOM → kosztorys. */
+  /** Po potwierdzeniu profilu: pomieszczenia + urządzenia + trasy → BOM → kosztorys → bundle. */
   async function runImport(profile: ImportProfile): Promise<void> {
     if (!dxfPath) return
     setWizardOpen(false)
-    setStatus({ kind: 'idle', text: 'Przetwarzam rzut (pomieszczenia + urządzenia)…' })
+    const drawingId = `drw-${profile.level}`
     try {
-      // 1) Pomieszczenia (z eksplozją bloków, jeśli wybrano)
-      const poly = await window.infra.dxf.polygonize({
-        path: dxfPath,
-        wallLayers: profile.wallLayers,
-        explodeBlocks: profile.explodeBlocks
-      })
-      const sp = polygonsToSpaces(poly.polygons)
-      setSpaces(sp)
+      // 1) Pomieszczenia — etykiety pól (czyste) lub rekonstrukcja ze ścian
+      setStatus({ kind: 'idle', text: 'Wykrywam pomieszczenia…' })
+      let domainSpaces: Space[] = []
+      let assignToRoom: ((at: { x: number; y: number }) => string | undefined) | undefined
+      if (profile.roomSource === 'area') {
+        const rr = await window.infra.dxf.extractRooms({
+          path: dxfPath,
+          areaLayers: profile.areaLayers,
+          explodeBlocks: profile.explodeBlocks
+        })
+        const rs = roomsToSpaces(rr.rooms, drawingId)
+        domainSpaces = rs.spaces
+        assignToRoom = rs.assign
+      } else {
+        const poly = await window.infra.dxf.polygonize({
+          path: dxfPath,
+          wallLayers: profile.wallLayers,
+          explodeBlocks: profile.explodeBlocks
+        })
+        domainSpaces = poly.polygons.map((p, i) => ({
+          id: `${drawingId}::room::${i + 1}`,
+          drawingId,
+          name: `Pom. ${i + 1}`,
+          polygon: p.points,
+          area: p.area
+        }))
+      }
+      const renderSpaces: RenderSpace[] = domainSpaces.map((s) => ({
+        id: s.id,
+        name: s.name,
+        polygon: s.polygon,
+        area: s.area
+      }))
+      setSpaces(renderSpaces)
 
-      // 2) Urządzenia z symboli DXF wg mapowania warstw
+      // 2) Urządzenia z symboli DXF wg mapowania warstw (+ przypisanie do pomieszczeń)
+      setStatus({ kind: 'idle', text: 'Wyciągam urządzenia…' })
       const ext = await window.infra.dxf.extractDevices({ path: dxfPath })
-      const drawingId = `drw-${profile.level}`
       const devices = devicesFromInserts(ext.inserts, profile.systemMapping, {
         drawingId,
-        idPrefix: `L${profile.level}`
+        idPrefix: `L${profile.level}`,
+        spaceOf: assignToRoom
       })
 
-      // 3) BOM + kosztorys (na razie bez tras — te dochodzą z trasowania)
-      const bom = buildBom({ devices, routes: [], trays: [] }, { cableSparePct: profile.cableSparePct })
+      // 3) Trasowanie kabli A* (opcjonalne) → CableRoute[]
+      let routes: ReturnType<typeof buildCableRoutes> = []
+      let routedAstar = 0
+      if (profile.doRouting && devices.length) {
+        setStatus({ kind: 'idle', text: 'Trasuję kable (A*) — to może chwilę potrwać…' })
+        const cab = await window.infra.dxf.extractDevices({ path: dxfPath, layers: profile.targetLayers })
+        if (cab.inserts.length) {
+          const rc = await window.infra.dxf.routeCables({
+            path: dxfPath,
+            sources: devices.map((d) => d.position),
+            targets: cab.inserts.map((c) => c.at),
+            wallLayers: profile.wallLayers,
+            explodeBlocks: profile.explodeBlocks
+          })
+          routedAstar = rc.routes.filter((r) => r.method === 'astar').length
+          routes = buildCableRoutes({
+            devices,
+            routes: rc.routes,
+            unitMm: profile.unitMm,
+            cabinetIds: cab.inserts.map((_, i) => `rack-${profile.level}-${i}`)
+          })
+        }
+      }
+
+      // 4) BOM + kosztorys
+      const bom = buildBom({ devices, routes, trays: [] }, { cableSparePct: profile.cableSparePct })
       const cost = buildCost(bom, { overheadPct: profile.overheadPct, vatPct: profile.vatPct })
 
+      // 5) Persystencja do bundla (utwórz, jeśli brak)
+      persistImport(profile, drawingId, domainSpaces, devices, routes, bom, cost)
+
+      const cableM = routes.reduce((s, r) => s + r.length, 0)
+      const roomAreaM2 = domainSpaces.reduce((s, sp) => s + sp.area, 0) / 1_000_000
       setSummary({
         level: profile.level,
-        spaces: sp.length,
+        spaces: domainSpaces.length,
+        roomAreaM2,
         devices: devices.length,
         byType: countByTypeKey(devices),
+        cableM,
+        routedAstar,
         bom,
         cost
       })
       setStatus({
         kind: 'ok',
-        text: `Zaimportowano: ${devices.length} urządzeń, ${sp.length} pomieszczeń, kosztorys brutto ${PLN(cost.gross)}`
+        text: `Zaimportowano kondygnację ${profile.level}: ${devices.length} urządzeń, ${domainSpaces.length} pomieszczeń, ${Math.round(cableM)} m kabla, brutto ${PLN(cost.gross)}`
       })
     } catch (e) {
       setStatus({ kind: 'err', text: `Import instalacji: ${(e as Error).message}` })
     }
+  }
+
+  /** Wpisuje wynik importu do ProjectBundle (zastępuje dane danej kondygnacji). */
+  function persistImport(
+    profile: ImportProfile,
+    drawingId: string,
+    domainSpaces: Space[],
+    devices: Device[],
+    routes: ReturnType<typeof buildCableRoutes>,
+    bom: BomItem[],
+    cost: CostSummary
+  ): void {
+    setBundle((prev) => {
+      const base =
+        prev ??
+        createEmptyBundle(
+          createEmptyProject({
+            id: crypto.randomUUID(),
+            name: profile.projectName || 'Projekt instalacji',
+            client: profile.client,
+            now: new Date().toISOString()
+          })
+        )
+      // Zastąp dane tej kondygnacji (drawingId), zachowaj pozostałe.
+      const keepSpace = base.spaces.filter((s) => s.drawingId !== drawingId)
+      const keepDev = base.devices.filter((d) => d.drawingId !== drawingId)
+      const keepRoute = base.routes.filter((r) => !r.id.startsWith(`route-L${profile.level}-`))
+      const drawing = {
+        id: drawingId,
+        projectId: base.project.id,
+        name: profile.drawingName || `Kondygnacja ${profile.level}`,
+        level: profile.level,
+        sourceDxfRef: dxfPath ?? '',
+        layers: [],
+        transform: [profile.unitMm, 0, 0, profile.unitMm, 0, 0] as [number, number, number, number, number, number],
+        bbox: doc?.bbox ?? { minX: 0, minY: 0, maxX: 0, maxY: 0 }
+      }
+      const drawings = [...base.drawings.filter((d) => d.id !== drawingId), drawing]
+      return {
+        ...base,
+        project: { ...base.project, updatedAt: new Date().toISOString() },
+        drawings,
+        spaces: [...keepSpace, ...domainSpaces],
+        devices: [...keepDev, ...devices],
+        routes: [...keepRoute, ...routes],
+        bom,
+        costs: cost.items
+      }
+    })
   }
 
   function toggleLayer(name: string): void {
@@ -389,7 +503,12 @@ export default function App(): JSX.Element {
               <div className="mb-2 grid grid-cols-2 gap-1 text-slate-300">
                 <span>Urządzeń: <b className="text-accent">{summary.devices}</b></span>
                 <span>Pomieszczeń: <b className="text-accent">{summary.spaces}</b></span>
+                <span>Pow.: <b className="text-accent">{summary.roomAreaM2.toFixed(0)} m²</b></span>
+                <span>Kabel: <b className="text-accent">{Math.round(summary.cableM)} m</b></span>
               </div>
+              {summary.cableM > 0 && (
+                <p className="mb-1 text-[10px] text-slate-500">Trasy A*: {summary.routedAstar}/{summary.devices}</p>
+              )}
               <table className="w-full">
                 <tbody>
                   {Object.entries(summary.byType).map(([k, v]) => (

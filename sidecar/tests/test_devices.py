@@ -90,3 +90,45 @@ def test_extract_devices_filter_all_when_no_layers(fixture_path):
     # Bez filtra: podkład (PODKLAD) też się liczy.
     res = server._extract_devices({"path": fixture_path})
     assert res["count"] == 11  # 10 urządzeń + 1 podkład
+
+
+def test_extract_rooms_from_area_labels(fixture_path):
+    res = server._extract_rooms({"path": fixture_path})
+    assert res["count"] == 2
+    by_num = {r["number"]: r for r in res["rooms"]}
+    assert set(by_num) == {"0.1", "0.2"}
+    assert by_num["0.1"]["name"] == "Sala A"
+    assert by_num["0.1"]["areaM2"] == 64.0 or by_num["0.1"]["areaM2"] == 48.0
+    # pole z etykiety (nie geometrii): 48 i 64 m²
+    areas = sorted(r["areaM2"] for r in res["rooms"])
+    assert areas == [48.0, 64.0]
+    for r in res["rooms"]:
+        assert set(r["at"].keys()) == {"x", "y"}
+        assert len(r["tag"]) >= 3
+
+
+def test_parse_room_label_variants():
+    assert server._parse_room_label(["1.11", "Scena Nowa", "224.64 m²"]) == ("1.11", "Scena Nowa", 224.64)
+    # przecinek dziesiętny + 'm2'
+    assert server._parse_room_label(["0.2", "Bar", "3,09 m2"]) == ("0.2", "Bar", 3.09)
+
+
+def test_route_cables_astar_avoids_and_measures(fixture_path):
+    # Źródła w obu pomieszczeniach, cel poza nimi → trasy A* z dodatnią długością.
+    sources = [{"x": 3000, "y": 1000}, {"x": 10000, "y": 1000}]
+    targets = [{"x": 13000, "y": 7000}]
+    res = server._route_cables(
+        {"path": fixture_path, "sources": sources, "targets": targets,
+         "wallLayers": ["A-WALL"], "explodeBlocks": True}
+    )
+    assert len(res["routes"]) == 2
+    for rt in res["routes"]:
+        assert rt["length"] > 0
+        assert len(rt["path"]) >= 2
+        assert rt["targetIndex"] == 0
+        assert rt["method"] in ("astar", "straight")
+
+
+def test_route_cables_empty_without_targets(fixture_path):
+    res = server._route_cables({"path": fixture_path, "sources": [{"x": 0, "y": 0}], "targets": []})
+    assert res["routes"] == []

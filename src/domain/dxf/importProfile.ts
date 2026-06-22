@@ -26,7 +26,11 @@ export interface ImportProfile {
   unitMm: number
 
   // ── Geometria pomieszczeń ──
-  /** Tokeny warstw ścian do `polygonize` (dopasowanie po podłańcuchu). */
+  /** Źródło pomieszczeń: etykiety pól (A-AREA, czyste) lub rekonstrukcja ze ścian. */
+  roomSource: 'area' | 'walls'
+  /** Tokeny warstw etykiet pól (dla roomSource='area'). */
+  areaLayers: string[]
+  /** Tokeny warstw ścian do `polygonize`/trasowania (dopasowanie po podłańcuchu). */
   wallLayers: string[]
   /** Wejść w bloki INSERT (podkład architektoniczny bywa jednym blokiem). */
   explodeBlocks: boolean
@@ -34,6 +38,12 @@ export interface ImportProfile {
   // ── Instalacje ──
   /** Warstwa → system/typ urządzenia (null = pomiń). Do potwierdzenia w UI. */
   systemMapping: LayerSystemMap
+
+  // ── Trasowanie ──
+  /** Trasować kable A* od urządzeń do szaf (cięższe obliczeniowo). */
+  doRouting: boolean
+  /** Tokeny warstw szaf/rozdzielni (cele tras). */
+  targetLayers: string[]
 
   // ── Kosztorys ──
   cableSparePct: number
@@ -71,10 +81,15 @@ export function buildDefaultProfile(input: DefaultProfileInput): ImportProfile {
     level: guessLevel(fileName),
     units: input.units,
     unitMm: input.units === 'm' ? 1000 : 1,
+    // Etykiety pól (A-AREA) gdy są w rysunku — czystsze pomieszczenia niż ze ścian.
+    roomSource: input.layers.some((l) => /area/i.test(l.name)) ? 'area' : 'walls',
+    areaLayers: ['AREA'],
     // Domyślnie tokeny ścian z warstw; gdy brak — generyczny token 'WALL' (łapie A-WALL po eksplozji).
     wallLayers: wall.length ? wall : ['WALL'],
     explodeBlocks: true,
     systemMapping: guessSystemMapping(input.layers),
+    doRouting: true,
+    targetLayers: ['szaf', 'rack'],
     cableSparePct: 5,
     overheadPct: 12,
     vatPct: 23

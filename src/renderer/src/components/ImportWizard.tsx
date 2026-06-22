@@ -124,16 +124,52 @@ export function ImportWizard({ doc, fileName, initial, onConfirm, onCancel }: Im
 
           {/* Geometria pomieszczeń */}
           <section className="space-y-2 rounded border border-white/10 p-3">
-            <h3 className="font-semibold text-slate-300">Pomieszczenia (wykrywanie ścian)</h3>
+            <h3 className="font-semibold text-slate-300">Pomieszczenia</h3>
+            <div className="flex gap-4">
+              <label className="flex items-center gap-2">
+                <input type="radio" checked={profile.roomSource === 'area'} onChange={() => set('roomSource', 'area')} />
+                <span>Etykiety pól (A-AREA — numer/nazwa/metraż)</span>
+              </label>
+              <label className="flex items-center gap-2">
+                <input type="radio" checked={profile.roomSource === 'walls'} onChange={() => set('roomSource', 'walls')} />
+                <span>Ze ścian (polygonize)</span>
+              </label>
+            </div>
             <label className="flex items-center gap-2">
               <input type="checkbox" checked={profile.explodeBlocks} onChange={(e) => set('explodeBlocks', e.target.checked)} />
-              <span>Eksploduj bloki (podkład architektoniczny bywa jednym blokiem)</span>
+              <span>Eksploduj bloki (podkład bywa jednym blokiem)</span>
             </label>
-            <Field label="Warstwy ścian (tokeny, po przecinku — dopasowanie po podłańcuchu)">
+            {profile.roomSource === 'area' ? (
+              <Field label="Warstwy etykiet pól (tokeny, po przecinku)">
+                <input
+                  className={inp}
+                  value={profile.areaLayers.join(', ')}
+                  onChange={(e) => set('areaLayers', e.target.value.split(',').map((s) => s.trim()).filter(Boolean))}
+                />
+              </Field>
+            ) : (
+              <Field label="Warstwy ścian (tokeny, po przecinku — dopasowanie po podłańcuchu)">
+                <input
+                  className={inp}
+                  value={profile.wallLayers.join(', ')}
+                  onChange={(e) => set('wallLayers', e.target.value.split(',').map((s) => s.trim()).filter(Boolean))}
+                />
+              </Field>
+            )}
+          </section>
+
+          {/* Trasowanie */}
+          <section className="space-y-2 rounded border border-white/10 p-3">
+            <h3 className="font-semibold text-slate-300">Trasowanie kabli (A*)</h3>
+            <label className="flex items-center gap-2">
+              <input type="checkbox" checked={profile.doRouting} onChange={(e) => set('doRouting', e.target.checked)} />
+              <span>Trasuj kable urządzenie→szafa (cięższe, omija ściany)</span>
+            </label>
+            <Field label="Warstwy szaf/rozdzielni (cele tras)">
               <input
                 className={inp}
-                value={profile.wallLayers.join(', ')}
-                onChange={(e) => set('wallLayers', e.target.value.split(',').map((s) => s.trim()).filter(Boolean))}
+                value={profile.targetLayers.join(', ')}
+                onChange={(e) => set('targetLayers', e.target.value.split(',').map((s) => s.trim()).filter(Boolean))}
               />
             </Field>
           </section>
