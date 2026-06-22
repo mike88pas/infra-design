@@ -172,6 +172,28 @@ export interface PolygonizeResult {
   snapTolerance: number
 }
 
+/**
+ * Symbol urządzenia z DXF (blok INSERT z modelspace) — transport z sidecara
+ * (`extract_devices`). Symbole bywają blokami anonimowymi (*U34), więc system/typ
+ * klasyfikujemy po WARSTWIE (src/domain/dxf/systemMapping.ts), nie po nazwie bloku.
+ */
+export interface DxfInsert {
+  layer: string
+  name: string
+  at: Point
+  rotation: number
+  sx: number
+  sy: number
+  /** Atrybuty bloku (ATTRIB), np. { IDFX: 'PPD1.1/X1/', NR: '12' } → props urządzenia. */
+  attribs: Record<string, string>
+}
+
+/** Wynik metody sidecara `extract_devices`. */
+export interface ExtractDevicesResult {
+  inserts: DxfInsert[]
+  count: number
+}
+
 // ──────────────────────────────────────────────────────────────────────────
 // WERTYKAŁA: INSTALACJE
 // ──────────────────────────────────────────────────────────────────────────

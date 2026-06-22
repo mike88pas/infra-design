@@ -118,8 +118,19 @@ function registerIpc(): void {
   // Wykrycie pomieszczeń z DXF (Shapely polygonize) → DetectedPolygon[].
   ipcMain.handle(
     'dxf:polygonize',
-    async (_e, params: { path: string; wallLayers?: string[]; snap?: number; minArea?: number }) => {
+    async (
+      _e,
+      params: { path: string; wallLayers?: string[]; explodeBlocks?: boolean; snap?: number; minArea?: number }
+    ) => {
       return getSidecar().polygonize(params)
+    }
+  )
+
+  // Ekstrakcja symboli urządzeń (INSERT-y) z DXF → ExtractDevicesResult.
+  ipcMain.handle(
+    'dxf:extractDevices',
+    async (_e, params: { path: string; layers?: string[]; includeAttribs?: boolean }) => {
+      return getSidecar().extractDevices(params)
     }
   )
 }

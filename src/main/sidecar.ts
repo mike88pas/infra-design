@@ -13,7 +13,7 @@
 import { spawn, type ChildProcessWithoutNullStreams } from 'node:child_process'
 import { existsSync } from 'node:fs'
 import { join } from 'node:path'
-import type { DxfDocument, PolygonizeResult } from '@domain/model/schema'
+import type { DxfDocument, ExtractDevicesResult, PolygonizeResult } from '@domain/model/schema'
 
 export interface SidecarOptions {
   /** Katalog z kodem sidecara (server.py). */
@@ -137,10 +137,20 @@ export class SidecarBridge {
   polygonize(params: {
     path: string
     wallLayers?: string[]
+    explodeBlocks?: boolean
     snap?: number
     minArea?: number
   }): Promise<PolygonizeResult> {
     return this.request('polygonize', params, 120_000)
+  }
+
+  /** Ekstrakcja symboli urządzeń (INSERT-y) z warstwą, pozycją i atrybutami. */
+  extractDevices(params: {
+    path: string
+    layers?: string[]
+    includeAttribs?: boolean
+  }): Promise<ExtractDevicesResult> {
+    return this.request('extract_devices', params, 120_000)
   }
 
   stop(): void {

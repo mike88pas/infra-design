@@ -1,5 +1,5 @@
 import { useMemo, useRef, useState } from 'react'
-import type { DxfDocument, ProjectBundle } from '../../domain/model/schema'
+import type { BomItem, DxfDocument, ProjectBundle } from '../../domain/model/schema'
 import { CadViewer } from '@core/cad/CadViewer'
 import { polygonsToSpaces, type CadScene, type RenderSpace } from '@core/cad'
 import {
@@ -7,6 +7,20 @@ import {
   guessWallLayers,
   type LayerRole
 } from '../../domain/dxf/layerMapping'
+import { ImportWizard } from './components/ImportWizard'
+import type { ImportProfile } from '../../domain/dxf/importProfile'
+import { devicesFromInserts, countByTypeKey } from '../../domain/installations/fromDxf'
+import { buildBom } from '../../domain/installations/bom'
+import { buildCost, PLN, type CostSummary } from '../../domain/installations/cost'
+
+interface ImportSummary {
+  level: number
+  spaces: number
+  devices: number
+  byType: Record<string, number>
+  bom: BomItem[]
+  cost: CostSummary
+}
 
 type Status = { kind: 'idle' | 'ok' | 'err'; text: string }
 
@@ -36,7 +50,13 @@ export default function App(): JSX.Element {
   const [realInput, setRealInput] = useState('')
   const [unitMm, setUnitMm] = useState<number | null>(null)
 
+  // Kreator importu instalacji (F2)
+  const [wizardOpen, setWizardOpen] = useState(false)
+  const [summary, setSummary] = useState<ImportSummary | null>(null)
+
   const sceneRef = useRef<CadScene | null>(null)
+
+  const fileName = useMemo(() => (dxfPath ? dxfPath.split(/[\\/]/).pop() ?? '' : ''), [dxfPath])
 
   const totalArea = useMemo(
     () => spaces.reduce((s, sp) => s + sp.area, 0) / 1_000_000,
@@ -136,6 +156,71 @@ export default function App(): JSX.Element {
     }
   }
 
+  /** Import pod kreator instalacji: wczytuje DXF i otwiera formularz wartości początkowych. */
+  async function importInstallations(): Promise<void> {
+    setStatus({ kind: 'idle', text: 'Wczytuję DXF…' })
+    try {
+      const res = await window.infra.dxf.import()
+      if (!res.imported || !res.doc || !res.filePath) {
+        setStatus({ kind: 'idle', text: 'Import anulowany' })
+        return
+      }
+      setDoc(res.doc)
+      setDxfPath(res.filePath)
+      setLayerVisibility(Object.fromEntries(res.doc.layers.map((l) => [l.name, l.visible])))
+      setSpaces([])
+      setSummary(null)
+      setWizardOpen(true)
+      setStatus({ kind: 'ok', text: 'Potwierdź wartości początkowe w kreatorze' })
+    } catch (e) {
+      setStatus({ kind: 'err', text: `Import DXF: ${(e as Error).message}` })
+    }
+  }
+
+  /** Po potwierdzeniu profilu: pomieszczenia + urządzenia → BOM → kosztorys. */
+  async function runImport(profile: ImportProfile): Promise<void> {
+    if (!dxfPath) return
+    setWizardOpen(false)
+    setStatus({ kind: 'idle', text: 'Przetwarzam rzut (pomieszczenia + urządzenia)…' })
+    try {
+      // 1) Pomieszczenia (z eksplozją bloków, jeśli wybrano)
+      const poly = await window.infra.dxf.polygonize({
+        path: dxfPath,
+        wallLayers: profile.wallLayers,
+        explodeBlocks: profile.explodeBlocks
+      })
+      const sp = polygonsToSpaces(poly.polygons)
+      setSpaces(sp)
+
+      // 2) Urządzenia z symboli DXF wg mapowania warstw
+      const ext = await window.infra.dxf.extractDevices({ path: dxfPath })
+      const drawingId = `drw-${profile.level}`
+      const devices = devicesFromInserts(ext.inserts, profile.systemMapping, {
+        drawingId,
+        idPrefix: `L${profile.level}`
+      })
+
+      // 3) BOM + kosztorys (na razie bez tras — te dochodzą z trasowania)
+      const bom = buildBom({ devices, routes: [], trays: [] }, { cableSparePct: profile.cableSparePct })
+      const cost = buildCost(bom, { overheadPct: profile.overheadPct, vatPct: profile.vatPct })
+
+      setSummary({
+        level: profile.level,
+        spaces: sp.length,
+        devices: devices.length,
+        byType: countByTypeKey(devices),
+        bom,
+        cost
+      })
+      setStatus({
+        kind: 'ok',
+        text: `Zaimportowano: ${devices.length} urządzeń, ${sp.length} pomieszczeń, kosztorys brutto ${PLN(cost.gross)}`
+      })
+    } catch (e) {
+      setStatus({ kind: 'err', text: `Import instalacji: ${(e as Error).message}` })
+    }
+  }
+
   function toggleLayer(name: string): void {
     setLayerVisibility((v) => ({ ...v, [name]: !v[name] }))
   }
@@ -205,6 +290,10 @@ export default function App(): JSX.Element {
 
           <button onClick={importDxf} className="rounded bg-accent/20 px-4 py-2 text-sm font-medium text-accent hover:bg-accent/30">
             Importuj rzut DXF
+          </button>
+
+          <button onClick={importInstallations} className="rounded bg-emerald-400/15 px-4 py-2 text-sm font-medium text-emerald-300 hover:bg-emerald-400/25">
+            Importuj projekt + instalacje (kreator)
           </button>
 
           {doc && (
@@ -292,8 +381,45 @@ export default function App(): JSX.Element {
               {hovered && <div className="mt-1 text-accent">{hovered.name}: {(hovered.area / 1_000_000).toFixed(1)} m²</div>}
             </div>
           )}
+
+          {/* panel wyników importu instalacji */}
+          {summary && (
+            <div className="absolute bottom-3 right-3 w-72 rounded-lg border border-emerald-400/20 bg-black/70 p-3 text-xs text-slate-200 backdrop-blur">
+              <h3 className="mb-2 font-semibold text-emerald-300">Instalacje — kondygnacja {summary.level}</h3>
+              <div className="mb-2 grid grid-cols-2 gap-1 text-slate-300">
+                <span>Urządzeń: <b className="text-accent">{summary.devices}</b></span>
+                <span>Pomieszczeń: <b className="text-accent">{summary.spaces}</b></span>
+              </div>
+              <table className="w-full">
+                <tbody>
+                  {Object.entries(summary.byType).map(([k, v]) => (
+                    <tr key={k} className="border-t border-white/5">
+                      <td className="py-0.5 text-slate-400">{k}</td>
+                      <td className="py-0.5 text-right">{v}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+              <div className="mt-2 border-t border-white/10 pt-2">
+                <div className="flex justify-between"><span className="text-slate-400">Netto</span><span>{PLN(summary.cost.net)}</span></div>
+                <div className="flex justify-between font-semibold text-emerald-300"><span>Brutto</span><span>{PLN(summary.cost.gross)}</span></div>
+              </div>
+            </div>
+          )}
         </section>
       </main>
+
+      {wizardOpen && doc && (
+        <ImportWizard
+          doc={doc}
+          fileName={fileName}
+          onConfirm={runImport}
+          onCancel={() => {
+            setWizardOpen(false)
+            setStatus({ kind: 'idle', text: 'Import anulowany' })
+          }}
+        />
+      )}
 
       <footer className={`border-t border-white/10 px-6 py-2 text-xs ${statusColor}`}>{status.text}</footer>
     </div>

@@ -4,7 +4,12 @@
  */
 
 import { contextBridge, ipcRenderer } from 'electron'
-import type { ProjectBundle, DxfDocument, PolygonizeResult } from '@domain/model/schema'
+import type {
+  ProjectBundle,
+  DxfDocument,
+  PolygonizeResult,
+  ExtractDevicesResult
+} from '@domain/model/schema'
 
 const api = {
   sidecar: {
@@ -19,9 +24,15 @@ const api = {
     polygonize: (params: {
       path: string
       wallLayers?: string[]
+      explodeBlocks?: boolean
       snap?: number
       minArea?: number
-    }): Promise<PolygonizeResult> => ipcRenderer.invoke('dxf:polygonize', params)
+    }): Promise<PolygonizeResult> => ipcRenderer.invoke('dxf:polygonize', params),
+    extractDevices: (params: {
+      path: string
+      layers?: string[]
+      includeAttribs?: boolean
+    }): Promise<ExtractDevicesResult> => ipcRenderer.invoke('dxf:extractDevices', params)
   },
   project: {
     new: (name: string): Promise<ProjectBundle> => ipcRenderer.invoke('project:new', name),
