@@ -14,6 +14,9 @@ import { devicesFromInserts, countByTypeKey } from '@domain/installations/fromDx
 import { roomsToSpaces } from '@domain/dxf/rooms'
 import { buildBom } from '@domain/installations/bom'
 import { buildCost, PLN } from '@domain/installations/cost'
+import { runAudit } from '@domain/norms/audit'
+import { INSTALLATION_RULES } from '@domain/norms/rules'
+import type { ProjectBundle } from '@domain/model/schema'
 import clientData from './data/client-floor.json'
 
 interface ClientFloor {
@@ -91,7 +94,20 @@ export function ClientDemo(): JSX.Element {
     }
     const bom = buildBom({ devices, routes, trays: [] })
     const cost = buildCost(bom)
-    return { spaces, devices, byType: countByTypeKey(devices), bom, cost, cableM: routes.reduce((s, r) => s + r.length, 0) }
+    // Audyt: długość kanału LAN ≤ 90 m (DORI dochodzi z modelem pokrycia kamer).
+    const rules = INSTALLATION_RULES.filter((r) => r.id !== 'cctv.dori.target')
+    const failed = runAudit({ devices, routes, trays: [], circuits: [] } as unknown as ProjectBundle, rules).filter(
+      (v) => v.status === 'fail'
+    )
+    return {
+      spaces,
+      devices,
+      byType: countByTypeKey(devices),
+      bom,
+      cost,
+      cableM: routes.reduce((s, r) => s + r.length, 0),
+      normErrors: failed.length
+    }
   }, [mapping])
 
   // Warstwy urządzeń (mają INSERT-y i rozpoznany/edytowalny system).
@@ -186,6 +202,12 @@ export function ClientDemo(): JSX.Element {
             <div className="cost grad">
               <span>Brutto (z narzutem + VAT)</span>
               <b>{PLN(result.cost.gross)}</b>
+            </div>
+            <div className="cost">
+              <span>Walidacja norm (PN-EN 50173: kanał ≤90 m)</span>
+              <b style={{ color: result.normErrors ? '#f59e0b' : 'var(--accent)' }}>
+                {result.normErrors ? `▲ ${result.normErrors} tras >90 m` : '✓ OK'}
+              </b>
             </div>
           </div>
         </div>

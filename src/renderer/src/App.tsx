@@ -15,6 +15,8 @@ import { devicesFromInserts, countByTypeKey } from '../../domain/installations/f
 import { buildBom } from '../../domain/installations/bom'
 import { buildCost, PLN, type CostSummary } from '../../domain/installations/cost'
 import { buildCableRoutes } from '../../domain/installations/routing'
+import { runAudit } from '../../domain/norms/audit'
+import { INSTALLATION_RULES } from '../../domain/norms/rules'
 
 interface ImportSummary {
   level: number
@@ -26,6 +28,7 @@ interface ImportSummary {
   routedAstar: number
   bom: BomItem[]
   cost: CostSummary
+  audit: { errors: number; warnings: number; issues: Array<{ id: string; message: string; reference: string }> }
 }
 
 type Status = { kind: 'idle' | 'ok' | 'err'; text: string }
@@ -261,8 +264,22 @@ export default function App(): JSX.Element {
       const bom = buildBom({ devices, routes, trays: [] }, { cableSparePct: profile.cableSparePct })
       const cost = buildCost(bom, { overheadPct: profile.overheadPct, vatPct: profile.vatPct })
 
+      // 4b) Audyt norm — długość kanału LAN ≤ 90 m (mamy długości z A*).
+      // DORI pomijamy do czasu modelu pokrycia kamer (F4) — inaczej fałszywe ostrzeżenia.
+      const rules = INSTALLATION_RULES.filter((r) => r.id !== 'cctv.dori.target')
+      const validations = runAudit(
+        { devices, routes, trays: [], circuits: [] } as unknown as ProjectBundle,
+        rules
+      )
+      const failed = validations.filter((v) => v.status === 'fail')
+      const audit = {
+        errors: failed.filter((v) => v.severity === 'error').length,
+        warnings: failed.filter((v) => v.severity === 'warn').length,
+        issues: failed.slice(0, 6).map((v) => ({ id: v.targetId, message: v.message, reference: v.reference }))
+      }
+
       // 5) Persystencja do bundla (utwórz, jeśli brak)
-      persistImport(profile, drawingId, domainSpaces, devices, routes, bom, cost)
+      persistImport(profile, drawingId, domainSpaces, devices, routes, bom, cost, validations)
 
       const cableM = routes.reduce((s, r) => s + r.length, 0)
       const roomAreaM2 = domainSpaces.reduce((s, sp) => s + sp.area, 0) / 1_000_000
@@ -275,7 +292,8 @@ export default function App(): JSX.Element {
         cableM,
         routedAstar,
         bom,
-        cost
+        cost,
+        audit
       })
       setStatus({
         kind: 'ok',
@@ -294,7 +312,8 @@ export default function App(): JSX.Element {
     devices: Device[],
     routes: ReturnType<typeof buildCableRoutes>,
     bom: BomItem[],
-    cost: CostSummary
+    cost: CostSummary,
+    validations: ReturnType<typeof runAudit>
   ): void {
     setBundle((prev) => {
       const base =
@@ -330,7 +349,8 @@ export default function App(): JSX.Element {
         devices: [...keepDev, ...devices],
         routes: [...keepRoute, ...routes],
         bom,
-        costs: cost.items
+        costs: cost.items,
+        validations
       }
     })
   }
@@ -522,6 +542,21 @@ export default function App(): JSX.Element {
               <div className="mt-2 border-t border-white/10 pt-2">
                 <div className="flex justify-between"><span className="text-slate-400">Netto</span><span>{PLN(summary.cost.net)}</span></div>
                 <div className="flex justify-between font-semibold text-emerald-300"><span>Brutto</span><span>{PLN(summary.cost.gross)}</span></div>
+              </div>
+              <div className="mt-2 border-t border-white/10 pt-2">
+                <div className="mb-1 flex items-center justify-between">
+                  <span className="text-slate-400">Normy (PN-EN)</span>
+                  <span>
+                    {summary.audit.errors > 0 && <span className="mr-2 text-rose-400">● {summary.audit.errors} błąd</span>}
+                    {summary.audit.warnings > 0 && <span className="text-amber-400">▲ {summary.audit.warnings} ostrz.</span>}
+                    {summary.audit.errors === 0 && summary.audit.warnings === 0 && <span className="text-emerald-400">✓ OK</span>}
+                  </span>
+                </div>
+                {summary.audit.issues.slice(0, 4).map((iss, k) => (
+                  <div key={k} className="text-[10px] text-rose-300/80" title={iss.reference}>
+                    {iss.id}: {iss.message}
+                  </div>
+                ))}
               </div>
             </div>
           )}
