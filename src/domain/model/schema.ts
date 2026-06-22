@@ -172,6 +172,49 @@ export interface PolygonizeResult {
   snapTolerance: number
 }
 
+/**
+ * Symbol urządzenia z DXF (blok INSERT z modelspace) — transport z sidecara
+ * (`extract_devices`). Symbole bywają blokami anonimowymi (*U34), więc system/typ
+ * klasyfikujemy po WARSTWIE (src/domain/dxf/systemMapping.ts), nie po nazwie bloku.
+ */
+export interface DxfInsert {
+  layer: string
+  name: string
+  at: Point
+  rotation: number
+  sx: number
+  sy: number
+  /** Atrybuty bloku (ATTRIB), np. { IDFX: 'PPD1.1/X1/', NR: '12' } → props urządzenia. */
+  attribs: Record<string, string>
+}
+
+/** Wynik metody sidecara `extract_devices`. */
+export interface ExtractDevicesResult {
+  inserts: DxfInsert[]
+  count: number
+}
+
+/**
+ * Pomieszczenie z etykiety pola (warstwa A-AREA itp.) — numer, nazwa i OFICJALNY
+ * metraż nadany przez architekta. Czystsze źródło niż rekonstrukcja ze ścian.
+ */
+export interface DxfRoom {
+  number: string
+  name: string
+  /** Pole w m² z etykiety (może być null, gdy etykieta bez metrażu). */
+  areaM2: number | null
+  /** Środek ramki etykiety (do przypisania urządzeń do najbliższego pomieszczenia). */
+  at: Point
+  /** Obrys ramki etykiety (mały marker; nie obrys pomieszczenia). */
+  tag: Point[]
+}
+
+/** Wynik metody sidecara `extract_rooms`. */
+export interface ExtractRoomsResult {
+  rooms: DxfRoom[]
+  count: number
+}
+
 // ──────────────────────────────────────────────────────────────────────────
 // WERTYKAŁA: INSTALACJE
 // ──────────────────────────────────────────────────────────────────────────

@@ -4,7 +4,14 @@
  */
 
 import { contextBridge, ipcRenderer } from 'electron'
-import type { ProjectBundle, DxfDocument, PolygonizeResult } from '@domain/model/schema'
+import type {
+  ProjectBundle,
+  DxfDocument,
+  PolygonizeResult,
+  ExtractDevicesResult,
+  ExtractRoomsResult
+} from '@domain/model/schema'
+import type { SidecarRouteResult } from '../main/sidecar'
 
 const api = {
   sidecar: {
@@ -19,9 +26,29 @@ const api = {
     polygonize: (params: {
       path: string
       wallLayers?: string[]
+      explodeBlocks?: boolean
       snap?: number
       minArea?: number
-    }): Promise<PolygonizeResult> => ipcRenderer.invoke('dxf:polygonize', params)
+    }): Promise<PolygonizeResult> => ipcRenderer.invoke('dxf:polygonize', params),
+    extractDevices: (params: {
+      path: string
+      layers?: string[]
+      includeAttribs?: boolean
+    }): Promise<ExtractDevicesResult> => ipcRenderer.invoke('dxf:extractDevices', params),
+    extractRooms: (params: {
+      path: string
+      areaLayers?: string[]
+      explodeBlocks?: boolean
+    }): Promise<ExtractRoomsResult> => ipcRenderer.invoke('dxf:extractRooms', params),
+    routeCables: (params: {
+      path: string
+      sources: { x: number; y: number }[]
+      targets: { x: number; y: number }[]
+      wallLayers?: string[]
+      explodeBlocks?: boolean
+      cell?: number
+      inflate?: number
+    }): Promise<SidecarRouteResult> => ipcRenderer.invoke('dxf:routeCables', params)
   },
   project: {
     new: (name: string): Promise<ProjectBundle> => ipcRenderer.invoke('project:new', name),

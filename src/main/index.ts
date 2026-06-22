@@ -118,8 +118,46 @@ function registerIpc(): void {
   // Wykrycie pomieszczeń z DXF (Shapely polygonize) → DetectedPolygon[].
   ipcMain.handle(
     'dxf:polygonize',
-    async (_e, params: { path: string; wallLayers?: string[]; snap?: number; minArea?: number }) => {
+    async (
+      _e,
+      params: { path: string; wallLayers?: string[]; explodeBlocks?: boolean; snap?: number; minArea?: number }
+    ) => {
       return getSidecar().polygonize(params)
+    }
+  )
+
+  // Ekstrakcja symboli urządzeń (INSERT-y) z DXF → ExtractDevicesResult.
+  ipcMain.handle(
+    'dxf:extractDevices',
+    async (_e, params: { path: string; layers?: string[]; includeAttribs?: boolean }) => {
+      return getSidecar().extractDevices(params)
+    }
+  )
+
+  // Wykaz pomieszczeń z etykiet pól → ExtractRoomsResult.
+  ipcMain.handle(
+    'dxf:extractRooms',
+    async (_e, params: { path: string; areaLayers?: string[]; explodeBlocks?: boolean }) => {
+      return getSidecar().extractRooms(params)
+    }
+  )
+
+  // Trasowanie kabli A* (urządzenia → szafy) → SidecarRouteResult.
+  ipcMain.handle(
+    'dxf:routeCables',
+    async (
+      _e,
+      params: {
+        path: string
+        sources: { x: number; y: number }[]
+        targets: { x: number; y: number }[]
+        wallLayers?: string[]
+        explodeBlocks?: boolean
+        cell?: number
+        inflate?: number
+      }
+    ) => {
+      return getSidecar().routeCables(params)
     }
   )
 }

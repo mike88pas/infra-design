@@ -1,5 +1,6 @@
 import { useMemo, useRef, useState } from 'react'
-import type { DxfDocument, ProjectBundle } from '../../domain/model/schema'
+import type { BomItem, Device, DxfDocument, ProjectBundle, Space } from '../../domain/model/schema'
+import { createEmptyBundle, createEmptyProject } from '../../domain/model/schema'
 import { CadViewer } from '@core/cad/CadViewer'
 import { polygonsToSpaces, type CadScene, type RenderSpace } from '@core/cad'
 import {
@@ -7,6 +8,25 @@ import {
   guessWallLayers,
   type LayerRole
 } from '../../domain/dxf/layerMapping'
+import { ImportWizard } from './components/ImportWizard'
+import type { ImportProfile } from '../../domain/dxf/importProfile'
+import { roomsToSpaces } from '../../domain/dxf/rooms'
+import { devicesFromInserts, countByTypeKey } from '../../domain/installations/fromDxf'
+import { buildBom } from '../../domain/installations/bom'
+import { buildCost, PLN, type CostSummary } from '../../domain/installations/cost'
+import { buildCableRoutes } from '../../domain/installations/routing'
+
+interface ImportSummary {
+  level: number
+  spaces: number
+  roomAreaM2: number
+  devices: number
+  byType: Record<string, number>
+  cableM: number
+  routedAstar: number
+  bom: BomItem[]
+  cost: CostSummary
+}
 
 type Status = { kind: 'idle' | 'ok' | 'err'; text: string }
 
@@ -36,7 +56,13 @@ export default function App(): JSX.Element {
   const [realInput, setRealInput] = useState('')
   const [unitMm, setUnitMm] = useState<number | null>(null)
 
+  // Kreator importu instalacji (F2)
+  const [wizardOpen, setWizardOpen] = useState(false)
+  const [summary, setSummary] = useState<ImportSummary | null>(null)
+
   const sceneRef = useRef<CadScene | null>(null)
+
+  const fileName = useMemo(() => (dxfPath ? dxfPath.split(/[\\/]/).pop() ?? '' : ''), [dxfPath])
 
   const totalArea = useMemo(
     () => spaces.reduce((s, sp) => s + sp.area, 0) / 1_000_000,
@@ -136,6 +162,179 @@ export default function App(): JSX.Element {
     }
   }
 
+  /** Import pod kreator instalacji: wczytuje DXF i otwiera formularz wartości początkowych. */
+  async function importInstallations(): Promise<void> {
+    setStatus({ kind: 'idle', text: 'Wczytuję DXF…' })
+    try {
+      const res = await window.infra.dxf.import()
+      if (!res.imported || !res.doc || !res.filePath) {
+        setStatus({ kind: 'idle', text: 'Import anulowany' })
+        return
+      }
+      setDoc(res.doc)
+      setDxfPath(res.filePath)
+      setLayerVisibility(Object.fromEntries(res.doc.layers.map((l) => [l.name, l.visible])))
+      setSpaces([])
+      setSummary(null)
+      setWizardOpen(true)
+      setStatus({ kind: 'ok', text: 'Potwierdź wartości początkowe w kreatorze' })
+    } catch (e) {
+      setStatus({ kind: 'err', text: `Import DXF: ${(e as Error).message}` })
+    }
+  }
+
+  /** Po potwierdzeniu profilu: pomieszczenia + urządzenia + trasy → BOM → kosztorys → bundle. */
+  async function runImport(profile: ImportProfile): Promise<void> {
+    if (!dxfPath) return
+    setWizardOpen(false)
+    const drawingId = `drw-${profile.level}`
+    try {
+      // 1) Pomieszczenia — etykiety pól (czyste) lub rekonstrukcja ze ścian
+      setStatus({ kind: 'idle', text: 'Wykrywam pomieszczenia…' })
+      let domainSpaces: Space[] = []
+      let assignToRoom: ((at: { x: number; y: number }) => string | undefined) | undefined
+      if (profile.roomSource === 'area') {
+        const rr = await window.infra.dxf.extractRooms({
+          path: dxfPath,
+          areaLayers: profile.areaLayers,
+          explodeBlocks: profile.explodeBlocks
+        })
+        const rs = roomsToSpaces(rr.rooms, drawingId)
+        domainSpaces = rs.spaces
+        assignToRoom = rs.assign
+      } else {
+        const poly = await window.infra.dxf.polygonize({
+          path: dxfPath,
+          wallLayers: profile.wallLayers,
+          explodeBlocks: profile.explodeBlocks
+        })
+        domainSpaces = poly.polygons.map((p, i) => ({
+          id: `${drawingId}::room::${i + 1}`,
+          drawingId,
+          name: `Pom. ${i + 1}`,
+          polygon: p.points,
+          area: p.area
+        }))
+      }
+      const renderSpaces: RenderSpace[] = domainSpaces.map((s) => ({
+        id: s.id,
+        name: s.name,
+        polygon: s.polygon,
+        area: s.area
+      }))
+      setSpaces(renderSpaces)
+
+      // 2) Urządzenia z symboli DXF wg mapowania warstw (+ przypisanie do pomieszczeń)
+      setStatus({ kind: 'idle', text: 'Wyciągam urządzenia…' })
+      const ext = await window.infra.dxf.extractDevices({ path: dxfPath })
+      const devices = devicesFromInserts(ext.inserts, profile.systemMapping, {
+        drawingId,
+        idPrefix: `L${profile.level}`,
+        spaceOf: assignToRoom
+      })
+
+      // 3) Trasowanie kabli A* (opcjonalne) → CableRoute[]
+      let routes: ReturnType<typeof buildCableRoutes> = []
+      let routedAstar = 0
+      if (profile.doRouting && devices.length) {
+        setStatus({ kind: 'idle', text: 'Trasuję kable (A*) — to może chwilę potrwać…' })
+        const cab = await window.infra.dxf.extractDevices({ path: dxfPath, layers: profile.targetLayers })
+        if (cab.inserts.length) {
+          const rc = await window.infra.dxf.routeCables({
+            path: dxfPath,
+            sources: devices.map((d) => d.position),
+            targets: cab.inserts.map((c) => c.at),
+            wallLayers: profile.wallLayers,
+            explodeBlocks: profile.explodeBlocks
+          })
+          routedAstar = rc.routes.filter((r) => r.method === 'astar').length
+          routes = buildCableRoutes({
+            devices,
+            routes: rc.routes,
+            unitMm: profile.unitMm,
+            cabinetIds: cab.inserts.map((_, i) => `rack-${profile.level}-${i}`)
+          })
+        }
+      }
+
+      // 4) BOM + kosztorys
+      const bom = buildBom({ devices, routes, trays: [] }, { cableSparePct: profile.cableSparePct })
+      const cost = buildCost(bom, { overheadPct: profile.overheadPct, vatPct: profile.vatPct })
+
+      // 5) Persystencja do bundla (utwórz, jeśli brak)
+      persistImport(profile, drawingId, domainSpaces, devices, routes, bom, cost)
+
+      const cableM = routes.reduce((s, r) => s + r.length, 0)
+      const roomAreaM2 = domainSpaces.reduce((s, sp) => s + sp.area, 0) / 1_000_000
+      setSummary({
+        level: profile.level,
+        spaces: domainSpaces.length,
+        roomAreaM2,
+        devices: devices.length,
+        byType: countByTypeKey(devices),
+        cableM,
+        routedAstar,
+        bom,
+        cost
+      })
+      setStatus({
+        kind: 'ok',
+        text: `Zaimportowano kondygnację ${profile.level}: ${devices.length} urządzeń, ${domainSpaces.length} pomieszczeń, ${Math.round(cableM)} m kabla, brutto ${PLN(cost.gross)}`
+      })
+    } catch (e) {
+      setStatus({ kind: 'err', text: `Import instalacji: ${(e as Error).message}` })
+    }
+  }
+
+  /** Wpisuje wynik importu do ProjectBundle (zastępuje dane danej kondygnacji). */
+  function persistImport(
+    profile: ImportProfile,
+    drawingId: string,
+    domainSpaces: Space[],
+    devices: Device[],
+    routes: ReturnType<typeof buildCableRoutes>,
+    bom: BomItem[],
+    cost: CostSummary
+  ): void {
+    setBundle((prev) => {
+      const base =
+        prev ??
+        createEmptyBundle(
+          createEmptyProject({
+            id: crypto.randomUUID(),
+            name: profile.projectName || 'Projekt instalacji',
+            client: profile.client,
+            now: new Date().toISOString()
+          })
+        )
+      // Zastąp dane tej kondygnacji (drawingId), zachowaj pozostałe.
+      const keepSpace = base.spaces.filter((s) => s.drawingId !== drawingId)
+      const keepDev = base.devices.filter((d) => d.drawingId !== drawingId)
+      const keepRoute = base.routes.filter((r) => !r.id.startsWith(`route-L${profile.level}-`))
+      const drawing = {
+        id: drawingId,
+        projectId: base.project.id,
+        name: profile.drawingName || `Kondygnacja ${profile.level}`,
+        level: profile.level,
+        sourceDxfRef: dxfPath ?? '',
+        layers: [],
+        transform: [profile.unitMm, 0, 0, profile.unitMm, 0, 0] as [number, number, number, number, number, number],
+        bbox: doc?.bbox ?? { minX: 0, minY: 0, maxX: 0, maxY: 0 }
+      }
+      const drawings = [...base.drawings.filter((d) => d.id !== drawingId), drawing]
+      return {
+        ...base,
+        project: { ...base.project, updatedAt: new Date().toISOString() },
+        drawings,
+        spaces: [...keepSpace, ...domainSpaces],
+        devices: [...keepDev, ...devices],
+        routes: [...keepRoute, ...routes],
+        bom,
+        costs: cost.items
+      }
+    })
+  }
+
   function toggleLayer(name: string): void {
     setLayerVisibility((v) => ({ ...v, [name]: !v[name] }))
   }
@@ -205,6 +404,10 @@ export default function App(): JSX.Element {
 
           <button onClick={importDxf} className="rounded bg-accent/20 px-4 py-2 text-sm font-medium text-accent hover:bg-accent/30">
             Importuj rzut DXF
+          </button>
+
+          <button onClick={importInstallations} className="rounded bg-emerald-400/15 px-4 py-2 text-sm font-medium text-emerald-300 hover:bg-emerald-400/25">
+            Importuj projekt + instalacje (kreator)
           </button>
 
           {doc && (
@@ -292,8 +495,50 @@ export default function App(): JSX.Element {
               {hovered && <div className="mt-1 text-accent">{hovered.name}: {(hovered.area / 1_000_000).toFixed(1)} m²</div>}
             </div>
           )}
+
+          {/* panel wyników importu instalacji */}
+          {summary && (
+            <div className="absolute bottom-3 right-3 w-72 rounded-lg border border-emerald-400/20 bg-black/70 p-3 text-xs text-slate-200 backdrop-blur">
+              <h3 className="mb-2 font-semibold text-emerald-300">Instalacje — kondygnacja {summary.level}</h3>
+              <div className="mb-2 grid grid-cols-2 gap-1 text-slate-300">
+                <span>Urządzeń: <b className="text-accent">{summary.devices}</b></span>
+                <span>Pomieszczeń: <b className="text-accent">{summary.spaces}</b></span>
+                <span>Pow.: <b className="text-accent">{summary.roomAreaM2.toFixed(0)} m²</b></span>
+                <span>Kabel: <b className="text-accent">{Math.round(summary.cableM)} m</b></span>
+              </div>
+              {summary.cableM > 0 && (
+                <p className="mb-1 text-[10px] text-slate-500">Trasy A*: {summary.routedAstar}/{summary.devices}</p>
+              )}
+              <table className="w-full">
+                <tbody>
+                  {Object.entries(summary.byType).map(([k, v]) => (
+                    <tr key={k} className="border-t border-white/5">
+                      <td className="py-0.5 text-slate-400">{k}</td>
+                      <td className="py-0.5 text-right">{v}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+              <div className="mt-2 border-t border-white/10 pt-2">
+                <div className="flex justify-between"><span className="text-slate-400">Netto</span><span>{PLN(summary.cost.net)}</span></div>
+                <div className="flex justify-between font-semibold text-emerald-300"><span>Brutto</span><span>{PLN(summary.cost.gross)}</span></div>
+              </div>
+            </div>
+          )}
         </section>
       </main>
+
+      {wizardOpen && doc && (
+        <ImportWizard
+          doc={doc}
+          fileName={fileName}
+          onConfirm={runImport}
+          onCancel={() => {
+            setWizardOpen(false)
+            setStatus({ kind: 'idle', text: 'Import anulowany' })
+          }}
+        />
+      )}
 
       <footer className={`border-t border-white/10 px-6 py-2 text-xs ${statusColor}`}>{status.text}</footer>
     </div>

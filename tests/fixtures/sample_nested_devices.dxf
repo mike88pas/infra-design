@@ -5,11 +5,11 @@ HEADER
   9
 $ACADVER
   1
-AC1024
+AC1032
   9
 $ACADMAINTVER
- 70
-6
+ 90
+4
   9
 $DWGCODEPAGE
   3
@@ -18,6 +18,10 @@ ANSI_1252
 $LASTSAVEDBY
   1
 ezdxf
+  9
+$REQUIREDVERSIONS
+160
+0
   9
 $INSBASE
  10
@@ -549,7 +553,7 @@ $SPLINESEGS
   9
 $HANDSEED
   5
-51
+68
   9
 $SURFTAB1
  70
@@ -929,11 +933,11 @@ $PSTYLEMODE
   9
 $FINGERPRINTGUID
   2
-{5AB685DC-ED2B-4B5A-BA31-C11FBA2F145B}
+{FF727E15-10A3-4DCC-A327-A24DBCF8B69B}
   9
 $VERSIONGUID
   2
-{C4BA8573-CE9E-4684-80BA-5CCE410B7CD3}
+{C9AE383D-533B-43A2-A8C8-3F2EBF272035}
   9
 $EXTNAMES
 290
@@ -1611,11 +1615,11 @@ AcDbSymbolTableRecord
 100
 AcDbLayerTableRecord
   2
-A-WALL
+PODKLAD
  70
 0
  62
-7
+8
   6
 Continuous
 370
@@ -1635,11 +1639,11 @@ AcDbSymbolTableRecord
 100
 AcDbLayerTableRecord
   2
-A-DOOR
+PST_gniazda_RJ-45
  70
 0
  62
-3
+1
   6
 Continuous
 370
@@ -1659,11 +1663,11 @@ AcDbSymbolTableRecord
 100
 AcDbLayerTableRecord
   2
-A-GLAZ
+PST_gniazda CCTV
  70
 0
  62
-5
+2
   6
 Continuous
 370
@@ -1683,11 +1687,11 @@ AcDbSymbolTableRecord
 100
 AcDbLayerTableRecord
   2
-A-AREA
+PST_gniazda AP
  70
 0
  62
-8
+3
   6
 Continuous
 370
@@ -1707,11 +1711,11 @@ AcDbSymbolTableRecord
 100
 AcDbLayerTableRecord
   2
-A-TEXT
+PST_kontrola dostępu
  70
 0
  62
-2
+5
   6
 Continuous
 370
@@ -1821,7 +1825,7 @@ ACAD
   0
 APPID
   5
-4E
+65
 330
 3
 100
@@ -1835,7 +1839,7 @@ HATCHBACKGROUNDCOLOR
   0
 APPID
   5
-4F
+66
 330
 3
 100
@@ -2011,7 +2015,7 @@ BLOCK_RECORD
 100
 AcDbSymbolTable
  70
-2
+4
   0
 BLOCK_RECORD
   5
@@ -2046,6 +2050,46 @@ AcDbBlockTableRecord
 *Paper_Space
 340
 1E
+ 70
+0
+280
+1
+281
+0
+  0
+BLOCK_RECORD
+  5
+34
+330
+9
+100
+AcDbSymbolTableRecord
+100
+AcDbBlockTableRecord
+  2
+ARCH_BASE
+340
+0
+ 70
+0
+280
+1
+281
+0
+  0
+BLOCK_RECORD
+  5
+41
+330
+9
+100
+AcDbSymbolTableRecord
+100
+AcDbBlockTableRecord
+  2
+DEV_RJ45
+340
+0
  70
 0
 280
@@ -2137,561 +2181,473 @@ AcDbEntity
 100
 AcDbBlockEnd
   0
+BLOCK
+  5
+35
+330
+34
+100
+AcDbEntity
+  8
+0
+100
+AcDbBlockBegin
+  2
+ARCH_BASE
+ 70
+0
+ 10
+0.0
+ 20
+0.0
+ 30
+0.0
+  3
+ARCH_BASE
+  1
+
+  0
+LWPOLYLINE
+  5
+37
+330
+34
+100
+AcDbEntity
+  8
+A-WALL
+100
+AcDbPolyline
+ 90
+4
+ 70
+1
+ 10
+0.0
+ 20
+0.0
+ 10
+6000.0
+ 20
+0.0
+ 10
+6000.0
+ 20
+8000.0
+ 10
+0.0
+ 20
+8000.0
+  0
+LWPOLYLINE
+  5
+38
+330
+34
+100
+AcDbEntity
+  8
+A-WALL
+100
+AcDbPolyline
+ 90
+4
+ 70
+1
+ 10
+6000.0
+ 20
+0.0
+ 10
+14000.0
+ 20
+0.0
+ 10
+14000.0
+ 20
+8000.0
+ 10
+6000.0
+ 20
+8000.0
+  0
+LWPOLYLINE
+  5
+39
+330
+34
+100
+AcDbEntity
+  8
+A-AREA-IDEN
+100
+AcDbPolyline
+ 90
+4
+ 70
+1
+ 10
+2500.0
+ 20
+3700.0
+ 10
+3500.0
+ 20
+3700.0
+ 10
+3500.0
+ 20
+4300.0
+ 10
+2500.0
+ 20
+4300.0
+  0
+MTEXT
+  5
+3A
+330
+34
+100
+AcDbEntity
+  8
+A-AREA-IDEN
+100
+AcDbMText
+ 10
+3000.0
+ 20
+4100.0
+ 30
+0.0
+ 40
+150.0
+ 71
+1
+  1
+0.1
+  0
+MTEXT
+  5
+3B
+330
+34
+100
+AcDbEntity
+  8
+A-AREA-IDEN
+100
+AcDbMText
+ 10
+3000.0
+ 20
+4000.0
+ 30
+0.0
+ 40
+150.0
+ 71
+1
+  1
+Sala A
+  0
+MTEXT
+  5
+3C
+330
+34
+100
+AcDbEntity
+  8
+A-AREA-IDEN
+100
+AcDbMText
+ 10
+3000.0
+ 20
+3900.0
+ 30
+0.0
+ 40
+150.0
+ 71
+1
+  1
+48.00 m²
+  0
+LWPOLYLINE
+  5
+3D
+330
+34
+100
+AcDbEntity
+  8
+A-AREA-IDEN
+100
+AcDbPolyline
+ 90
+4
+ 70
+1
+ 10
+9500.0
+ 20
+3700.0
+ 10
+10500.0
+ 20
+3700.0
+ 10
+10500.0
+ 20
+4300.0
+ 10
+9500.0
+ 20
+4300.0
+  0
+MTEXT
+  5
+3E
+330
+34
+100
+AcDbEntity
+  8
+A-AREA-IDEN
+100
+AcDbMText
+ 10
+10000.0
+ 20
+4100.0
+ 30
+0.0
+ 40
+150.0
+ 71
+1
+  1
+0.2
+  0
+MTEXT
+  5
+3F
+330
+34
+100
+AcDbEntity
+  8
+A-AREA-IDEN
+100
+AcDbMText
+ 10
+10000.0
+ 20
+4000.0
+ 30
+0.0
+ 40
+150.0
+ 71
+1
+  1
+Sala B
+  0
+MTEXT
+  5
+40
+330
+34
+100
+AcDbEntity
+  8
+A-AREA-IDEN
+100
+AcDbMText
+ 10
+10000.0
+ 20
+3900.0
+ 30
+0.0
+ 40
+150.0
+ 71
+1
+  1
+64.00 m²
+  0
+ENDBLK
+  5
+36
+330
+34
+100
+AcDbEntity
+  8
+0
+100
+AcDbBlockEnd
+  0
+BLOCK
+  5
+42
+330
+41
+100
+AcDbEntity
+  8
+0
+100
+AcDbBlockBegin
+  2
+DEV_RJ45
+ 70
+2
+ 10
+0.0
+ 20
+0.0
+ 30
+0.0
+  3
+DEV_RJ45
+  1
+
+  0
+CIRCLE
+  5
+44
+330
+41
+100
+AcDbEntity
+  8
+0
+100
+AcDbCircle
+ 10
+0.0
+ 20
+0.0
+ 30
+0.0
+ 40
+120.0
+  0
+ATTDEF
+  5
+45
+330
+41
+100
+AcDbEntity
+  8
+0
+100
+AcDbText
+ 10
+150.0
+ 20
+0.0
+ 30
+0.0
+ 40
+100.0
+  1
+
+ 11
+150.0
+ 21
+0.0
+ 31
+0.0
+100
+AcDbAttributeDefinition
+  3
+
+  2
+IDFX
+ 70
+0
+ 71
+1
+ 72
+0
+ 11
+150.0
+ 21
+0.0
+ 31
+0.0
+  0
+ATTDEF
+  5
+46
+330
+41
+100
+AcDbEntity
+  8
+0
+100
+AcDbText
+ 10
+150.0
+ 20
+150.0
+ 30
+0.0
+ 40
+100.0
+  1
+
+ 11
+150.0
+ 21
+150.0
+ 31
+0.0
+100
+AcDbAttributeDefinition
+  3
+
+  2
+NR
+ 70
+0
+ 71
+1
+ 72
+0
+ 11
+150.0
+ 21
+150.0
+ 31
+0.0
+  0
+ENDBLK
+  5
+43
+330
+41
+100
+AcDbEntity
+  8
+0
+100
+AcDbBlockEnd
+  0
 ENDSEC
   0
 SECTION
   2
 ENTITIES
   0
-LWPOLYLINE
-  5
-34
-330
-17
-100
-AcDbEntity
-  8
-A-WALL
-100
-AcDbPolyline
- 90
-4
- 70
-1
- 10
-0.0
- 20
-0.0
- 10
-20000.0
- 20
-0.0
- 10
-20000.0
- 20
-13000.0
- 10
-0.0
- 20
-13000.0
-  0
-LWPOLYLINE
-  5
-35
-330
-17
-100
-AcDbEntity
-  8
-A-WALL
-100
-AcDbPolyline
- 90
-4
- 70
-1
- 10
-400.0
- 20
-400.0
- 10
-6400.0
- 20
-400.0
- 10
-6400.0
- 20
-4400.0
- 10
-400.0
- 20
-4400.0
-  0
-LINE
-  5
-36
-330
-17
-100
-AcDbEntity
-  8
-A-DOOR
-100
-AcDbLine
- 10
-2950.0
- 20
-400.0
- 30
-0.0
- 11
-3850.0
- 21
-400.0
- 31
-0.0
-  0
-TEXT
-  5
-37
-330
-17
-100
-AcDbEntity
-  8
-A-TEXT
-100
-AcDbText
- 10
-700.0
- 20
-3800.0
- 30
-0.0
- 40
-300.0
-  1
-Recepcja
- 11
-700.0
- 21
-3800.0
- 31
-0.0
-100
-AcDbText
-  0
-LWPOLYLINE
-  5
-38
-330
-17
-100
-AcDbEntity
-  8
-A-WALL
-100
-AcDbPolyline
- 90
-4
- 70
-1
- 10
-6800.0
- 20
-400.0
- 10
-12400.0
- 20
-400.0
- 10
-12400.0
- 20
-4400.0
- 10
-6800.0
- 20
-4400.0
-  0
-LINE
-  5
-39
-330
-17
-100
-AcDbEntity
-  8
-A-DOOR
-100
-AcDbLine
- 10
-9150.0
- 20
-400.0
- 30
-0.0
- 11
-10050.0
- 21
-400.0
- 31
-0.0
-  0
-TEXT
-  5
-3A
-330
-17
-100
-AcDbEntity
-  8
-A-TEXT
-100
-AcDbText
- 10
-7100.0
- 20
-3800.0
- 30
-0.0
- 40
-300.0
-  1
-Sala konferencyjna
- 11
-7100.0
- 21
-3800.0
- 31
-0.0
-100
-AcDbText
-  0
-LWPOLYLINE
-  5
-3B
-330
-17
-100
-AcDbEntity
-  8
-A-WALL
-100
-AcDbPolyline
- 90
-4
- 70
-1
- 10
-12800.0
- 20
-400.0
- 10
-19600.0
- 20
-400.0
- 10
-19600.0
- 20
-6400.0
- 10
-12800.0
- 20
-6400.0
-  0
-LINE
-  5
-3C
-330
-17
-100
-AcDbEntity
-  8
-A-DOOR
-100
-AcDbLine
- 10
-15750.0
- 20
-400.0
- 30
-0.0
- 11
-16650.0
- 21
-400.0
- 31
-0.0
-  0
-TEXT
-  5
-3D
-330
-17
-100
-AcDbEntity
-  8
-A-TEXT
-100
-AcDbText
- 10
-13100.0
- 20
-5800.0
- 30
-0.0
- 40
-300.0
-  1
-Open space
- 11
-13100.0
- 21
-5800.0
- 31
-0.0
-100
-AcDbText
-  0
-LWPOLYLINE
-  5
-3E
-330
-17
-100
-AcDbEntity
-  8
-A-WALL
-100
-AcDbPolyline
- 90
-4
- 70
-1
- 10
-400.0
- 20
-4800.0
- 10
-12400.0
- 20
-4800.0
- 10
-12400.0
- 20
-6400.0
- 10
-400.0
- 20
-6400.0
-  0
-LINE
-  5
-3F
-330
-17
-100
-AcDbEntity
-  8
-A-DOOR
-100
-AcDbLine
- 10
-5950.0
- 20
-4800.0
- 30
-0.0
- 11
-6850.0
- 21
-4800.0
- 31
-0.0
-  0
-TEXT
-  5
-40
-330
-17
-100
-AcDbEntity
-  8
-A-TEXT
-100
-AcDbText
- 10
-700.0
- 20
-5800.0
- 30
-0.0
- 40
-300.0
-  1
-Korytarz
- 11
-700.0
- 21
-5800.0
- 31
-0.0
-100
-AcDbText
-  0
-LWPOLYLINE
-  5
-41
-330
-17
-100
-AcDbEntity
-  8
-A-WALL
-100
-AcDbPolyline
- 90
-4
- 70
-1
- 10
-400.0
- 20
-6800.0
- 10
-4400.0
- 20
-6800.0
- 10
-4400.0
- 20
-12600.0
- 10
-400.0
- 20
-12600.0
-  0
-LINE
-  5
-42
-330
-17
-100
-AcDbEntity
-  8
-A-DOOR
-100
-AcDbLine
- 10
-1950.0
- 20
-6800.0
- 30
-0.0
- 11
-2850.0
- 21
-6800.0
- 31
-0.0
-  0
-TEXT
-  5
-43
-330
-17
-100
-AcDbEntity
-  8
-A-TEXT
-100
-AcDbText
- 10
-700.0
- 20
-12000.0
- 30
-0.0
- 40
-300.0
-  1
-Serwerownia
- 11
-700.0
- 21
-12000.0
- 31
-0.0
-100
-AcDbText
-  0
-LWPOLYLINE
-  5
-44
-330
-17
-100
-AcDbEntity
-  8
-A-WALL
-100
-AcDbPolyline
- 90
-4
- 70
-1
- 10
-4800.0
- 20
-6800.0
- 10
-9600.0
- 20
-6800.0
- 10
-9600.0
- 20
-12600.0
- 10
-4800.0
- 20
-12600.0
-  0
-LINE
-  5
-45
-330
-17
-100
-AcDbEntity
-  8
-A-DOOR
-100
-AcDbLine
- 10
-6750.0
- 20
-6800.0
- 30
-0.0
- 11
-7650.0
- 21
-6800.0
- 31
-0.0
-  0
-TEXT
-  5
-46
-330
-17
-100
-AcDbEntity
-  8
-A-TEXT
-100
-AcDbText
- 10
-5100.0
- 20
-12000.0
- 30
-0.0
- 40
-300.0
-  1
-Pom. socjalne
- 11
-5100.0
- 21
-12000.0
- 31
-0.0
-100
-AcDbText
-  0
-LWPOLYLINE
+INSERT
   5
 47
 330
@@ -2699,55 +2655,19 @@ LWPOLYLINE
 100
 AcDbEntity
   8
-A-WALL
+PODKLAD
 100
-AcDbPolyline
- 90
-4
- 70
-1
+AcDbBlockReference
+  2
+ARCH_BASE
  10
-10000.0
+0.0
  20
-6800.0
- 10
-12400.0
- 20
-6800.0
- 10
-12400.0
- 20
-12600.0
- 10
-10000.0
- 20
-12600.0
-  0
-LINE
-  5
-48
-330
-17
-100
-AcDbEntity
-  8
-A-DOOR
-100
-AcDbLine
- 10
-10750.0
- 20
-6800.0
+0.0
  30
 0.0
- 11
-11650.0
- 21
-6800.0
- 31
-0.0
   0
-TEXT
+INSERT
   5
 49
 330
@@ -2755,61 +2675,21 @@ TEXT
 100
 AcDbEntity
   8
-A-TEXT
+PST_gniazda_RJ-45
 100
-AcDbText
+AcDbBlockReference
+ 66
+1
+  2
+DEV_RJ45
  10
-10300.0
+1000.0
  20
-12000.0
+1000.0
  30
 0.0
- 40
-300.0
-  1
-WC
- 11
-10300.0
- 21
-12000.0
- 31
-0.0
-100
-AcDbText
   0
-LWPOLYLINE
-  5
-4A
-330
-17
-100
-AcDbEntity
-  8
-A-WALL
-100
-AcDbPolyline
- 90
-4
- 70
-1
- 10
-12800.0
- 20
-6800.0
- 10
-19600.0
- 20
-6800.0
- 10
-19600.0
- 20
-12600.0
- 10
-12800.0
- 20
-12600.0
-  0
-LINE
+ATTRIB
   5
 4B
 330
@@ -2817,23 +2697,43 @@ LINE
 100
 AcDbEntity
   8
-A-DOOR
+0
 100
-AcDbLine
+AcDbText
  10
-15750.0
+1150.0
  20
-6800.0
+1000.0
  30
 0.0
+ 40
+100.0
+  1
+PPD1.1/X1/
  11
-16650.0
+1150.0
  21
-6800.0
+1000.0
+ 31
+0.0
+100
+AcDbAttribute
+  2
+IDFX
+ 70
+0
+ 71
+1
+ 72
+0
+ 11
+1150.0
+ 21
+1000.0
  31
 0.0
   0
-TEXT
+ATTRIB
   5
 4C
 330
@@ -2841,29 +2741,53 @@ TEXT
 100
 AcDbEntity
   8
-A-TEXT
+0
 100
 AcDbText
  10
-13100.0
+1150.0
  20
-12000.0
+1150.0
  30
 0.0
  40
-300.0
+100.0
   1
-Biuro 2
+2
  11
-13100.0
+1150.0
  21
-12000.0
+1150.0
  31
 0.0
 100
-AcDbText
+AcDbAttribute
+  2
+NR
+ 70
+0
+ 71
+1
+ 72
+0
+ 11
+1150.0
+ 21
+1150.0
+ 31
+0.0
   0
-LINE
+SEQEND
+  5
+4A
+330
+49
+100
+AcDbEntity
+  8
+PST_gniazda_RJ-45
+  0
+INSERT
   5
 4D
 330
@@ -2871,20 +2795,476 @@ LINE
 100
 AcDbEntity
   8
-A-GLAZ
+PST_gniazda_RJ-45
 100
-AcDbLine
+AcDbBlockReference
+ 66
+1
+  2
+DEV_RJ45
+ 10
+3000.0
+ 20
+1000.0
+ 30
+0.0
+  0
+ATTRIB
+  5
+4F
+330
+17
+100
+AcDbEntity
+  8
+0
+100
+AcDbText
+ 10
+3150.0
+ 20
+1000.0
+ 30
+0.0
+ 40
+100.0
+  1
+PPD1.2/X1/
+ 11
+3150.0
+ 21
+1000.0
+ 31
+0.0
+100
+AcDbAttribute
+  2
+IDFX
+ 70
+0
+ 71
+1
+ 72
+0
+ 11
+3150.0
+ 21
+1000.0
+ 31
+0.0
+  0
+ATTRIB
+  5
+50
+330
+17
+100
+AcDbEntity
+  8
+0
+100
+AcDbText
+ 10
+3150.0
+ 20
+1150.0
+ 30
+0.0
+ 40
+100.0
+  1
+4
+ 11
+3150.0
+ 21
+1150.0
+ 31
+0.0
+100
+AcDbAttribute
+  2
+NR
+ 70
+0
+ 71
+1
+ 72
+0
+ 11
+3150.0
+ 21
+1150.0
+ 31
+0.0
+  0
+SEQEND
+  5
+4E
+330
+4D
+100
+AcDbEntity
+  8
+PST_gniazda_RJ-45
+  0
+INSERT
+  5
+51
+330
+17
+100
+AcDbEntity
+  8
+PST_gniazda_RJ-45
+100
+AcDbBlockReference
+ 66
+1
+  2
+DEV_RJ45
+ 10
+8000.0
+ 20
+1000.0
+ 30
+0.0
+  0
+ATTRIB
+  5
+53
+330
+17
+100
+AcDbEntity
+  8
+0
+100
+AcDbText
+ 10
+8150.0
+ 20
+1000.0
+ 30
+0.0
+ 40
+100.0
+  1
+PPD1.3/X1/
+ 11
+8150.0
+ 21
+1000.0
+ 31
+0.0
+100
+AcDbAttribute
+  2
+IDFX
+ 70
+0
+ 71
+1
+ 72
+0
+ 11
+8150.0
+ 21
+1000.0
+ 31
+0.0
+  0
+ATTRIB
+  5
+54
+330
+17
+100
+AcDbEntity
+  8
+0
+100
+AcDbText
+ 10
+8150.0
+ 20
+1150.0
+ 30
+0.0
+ 40
+100.0
+  1
+6
+ 11
+8150.0
+ 21
+1150.0
+ 31
+0.0
+100
+AcDbAttribute
+  2
+NR
+ 70
+0
+ 71
+1
+ 72
+0
+ 11
+8150.0
+ 21
+1150.0
+ 31
+0.0
+  0
+SEQEND
+  5
+52
+330
+51
+100
+AcDbEntity
+  8
+PST_gniazda_RJ-45
+  0
+INSERT
+  5
+55
+330
+17
+100
+AcDbEntity
+  8
+PST_gniazda_RJ-45
+100
+AcDbBlockReference
+ 66
+1
+  2
+DEV_RJ45
+ 10
+11000.0
+ 20
+1000.0
+ 30
+0.0
+  0
+ATTRIB
+  5
+57
+330
+17
+100
+AcDbEntity
+  8
+0
+100
+AcDbText
+ 10
+11150.0
+ 20
+1000.0
+ 30
+0.0
+ 40
+100.0
+  1
+PPD1.4/X1/
+ 11
+11150.0
+ 21
+1000.0
+ 31
+0.0
+100
+AcDbAttribute
+  2
+IDFX
+ 70
+0
+ 71
+1
+ 72
+0
+ 11
+11150.0
+ 21
+1000.0
+ 31
+0.0
+  0
+ATTRIB
+  5
+58
+330
+17
+100
+AcDbEntity
+  8
+0
+100
+AcDbText
+ 10
+11150.0
+ 20
+1150.0
+ 30
+0.0
+ 40
+100.0
+  1
+8
+ 11
+11150.0
+ 21
+1150.0
+ 31
+0.0
+100
+AcDbAttribute
+  2
+NR
+ 70
+0
+ 71
+1
+ 72
+0
+ 11
+11150.0
+ 21
+1150.0
+ 31
+0.0
+  0
+SEQEND
+  5
+56
+330
+55
+100
+AcDbEntity
+  8
+PST_gniazda_RJ-45
+  0
+INSERT
+  5
+59
+330
+17
+100
+AcDbEntity
+  8
+PST_gniazda CCTV
+100
+AcDbBlockReference
+  2
+DEV_RJ45
  10
 2000.0
  20
-0.0
+6000.0
  30
 0.0
- 11
-4000.0
- 21
+  0
+INSERT
+  5
+5B
+330
+17
+100
+AcDbEntity
+  8
+PST_gniazda CCTV
+100
+AcDbBlockReference
+  2
+DEV_RJ45
+ 10
+9000.0
+ 20
+6000.0
+ 30
 0.0
- 31
+  0
+INSERT
+  5
+5D
+330
+17
+100
+AcDbEntity
+  8
+PST_gniazda CCTV
+100
+AcDbBlockReference
+  2
+DEV_RJ45
+ 10
+12000.0
+ 20
+6000.0
+ 30
+0.0
+  0
+INSERT
+  5
+5F
+330
+17
+100
+AcDbEntity
+  8
+PST_gniazda AP
+100
+AcDbBlockReference
+  2
+DEV_RJ45
+ 10
+2500.0
+ 20
+3000.0
+ 30
+0.0
+  0
+INSERT
+  5
+61
+330
+17
+100
+AcDbEntity
+  8
+PST_gniazda AP
+100
+AcDbBlockReference
+  2
+DEV_RJ45
+ 10
+9500.0
+ 20
+3000.0
+ 30
+0.0
+  0
+INSERT
+  5
+63
+330
+17
+100
+AcDbEntity
+  8
+PST_kontrola dostępu
+100
+AcDbBlockReference
+  2
+DEV_RJ45
+ 10
+500.0
+ 20
+4000.0
+ 30
 0.0
   0
 ENDSEC
@@ -3877,7 +4257,7 @@ CREATED_BY_EZDXF
   3
 WRITTEN_BY_EZDXF
 350
-50
+67
   0
 DICTIONARYVAR
   5
@@ -3889,11 +4269,11 @@ DictionaryVariables
 280
 0
   1
-1.4.4 @ 2026-06-22T17:20:29.514544+00:00
+1.4.4 @ 2026-06-22T17:20:29.531555+00:00
   0
 DICTIONARYVAR
   5
-50
+67
 330
 2D
 100
@@ -3901,7 +4281,7 @@ DictionaryVariables
 280
 0
   1
-1.4.4 @ 2026-06-22T17:20:29.517546+00:00
+1.4.4 @ 2026-06-22T17:20:29.534545+00:00
   0
 ENDSEC
   0

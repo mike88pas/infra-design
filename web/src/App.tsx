@@ -4,6 +4,7 @@ import { CadViewer } from '@core/cad/CadViewer'
 import type { RenderSpace } from '@core/cad'
 import { guessLayerRole } from '@domain/dxf/layerMapping'
 import sampleData from './data/sample-floor.json'
+import { ClientDemo } from './ClientDemo'
 
 const sample = sampleData as unknown as { doc: DxfDocument; spaces: RenderSpace[] }
 
@@ -28,7 +29,7 @@ const SYSTEMS = [
 const ROADMAP = [
   { ph: 'F0', t: 'Szkielet aplikacji, model danych, paczka projektu', done: true },
   { ph: 'F1', t: 'Import DXF, renderer rzutu, wykrywanie pomieszczeń', done: true },
-  { ph: 'F2', t: 'Plugin LAN: palety, punkty, trasy, długości, BOM', done: false },
+  { ph: 'F2', t: 'Plugin LAN: import urządzeń z rzutu, trasy A*, długości, BOM', done: true },
   { ph: 'F3', t: 'Kosztorys (KNR + cennik), eksport PDF/XLS/Word — PILOT', done: false },
   { ph: 'F4', t: 'CCTV (FOV/DORI), auto-routing, widok szafy rack', done: false },
   { ph: 'F5', t: 'Walidacja norm (PN-EN) z odnośnikami', done: false }
@@ -52,6 +53,7 @@ export function App(): JSX.Element {
             <a href="#problem">Problem</a>
             <a href="#jak">Jak działa</a>
             <a href="#demo">Demo</a>
+            <a href="#realny">Realny projekt</a>
             <a href="#roadmapa">Roadmapa</a>
           </div>
           <a className="btn" href="#kontakt">
@@ -177,6 +179,8 @@ export function App(): JSX.Element {
           </p>
         </div>
       </section>
+
+      <ClientDemo />
 
       <section className="block" id="systemy">
         <div className="wrap">

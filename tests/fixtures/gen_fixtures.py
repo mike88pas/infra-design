@@ -86,8 +86,64 @@ def make_dirty(path):
     return path
 
 
+def make_nested(path):
+    """Rzut „jak od klienta": ściany ukryte w JEDNYM bloku podkładu (test eksplozji),
+    urządzenia jako bloki INSERT na warstwach PST_* z atrybutami IDFX/NR (test extract_devices).
+    """
+    doc = ezdxf.new("R2018")
+    doc.header["$INSUNITS"] = 4  # mm
+    for name, color in [
+        ("PODKLAD", 8), ("PST_gniazda_RJ-45", 1), ("PST_gniazda CCTV", 2),
+        ("PST_gniazda AP", 3), ("PST_kontrola dostępu", 5),
+    ]:
+        if name not in doc.layers:
+            doc.layers.add(name, color=color)
+
+    # Blok podkładu: ściany na A-WALL — dwa pomieszczenia 6×8 i 8×8 m (wspólna ściana).
+    base = doc.blocks.new(name="ARCH_BASE")
+    base.add_lwpolyline(_rect(0, 0, 6000, 8000), close=True, dxfattribs={"layer": "A-WALL"})
+    base.add_lwpolyline(_rect(6000, 0, 8000, 8000), close=True, dxfattribs={"layer": "A-WALL"})
+
+    # Etykiety pól (jak A-AREA-IDEN klienta): ramka + MTEXT numer/nazwa/metraż.
+    # Pole z etykiety bywa oficjalne (nie równe geometrii) — tu 48 i 64 m².
+    for (cx, cy, num, name, area) in [
+        (3000, 4000, "0.1", "Sala A", "48.00 m²"),
+        (10000, 4000, "0.2", "Sala B", "64.00 m²"),
+    ]:
+        base.add_lwpolyline(_rect(cx - 500, cy - 300, 1000, 600), close=True, dxfattribs={"layer": "A-AREA-IDEN"})
+        # Osobne MTEXT-y (jak u klienta): numer / nazwa / pole.
+        for k, line in enumerate((num, name, area)):
+            base.add_mtext(line, dxfattribs={"layer": "A-AREA-IDEN", "char_height": 150}).set_location((cx, cy + 100 - k * 100))
+
+    # Blok symbolu urządzenia z definicją atrybutów (IDFX/NR).
+    dev = doc.blocks.new(name="DEV_RJ45")
+    dev.add_circle((0, 0), 120, dxfattribs={"layer": "0"})
+    dev.add_attdef("IDFX", dxfattribs={"layer": "0", "height": 100}).set_placement((150, 0))
+    dev.add_attdef("NR", dxfattribs={"layer": "0", "height": 100}).set_placement((150, 150))
+
+    msp = doc.modelspace()
+    # Podkład jako jeden INSERT na warstwie PODKLAD — ścian nie widać bez eksplozji.
+    msp.add_blockref("ARCH_BASE", (0, 0), dxfattribs={"layer": "PODKLAD"})
+
+    # Urządzenia LAN (z atrybutami) — 4 gniazda RJ-45.
+    for i, (x, y) in enumerate([(1000, 1000), (3000, 1000), (8000, 1000), (11000, 1000)]):
+        ref = msp.add_blockref("DEV_RJ45", (x, y), dxfattribs={"layer": "PST_gniazda_RJ-45"})
+        ref.add_auto_attribs({"IDFX": f"PPD1.{i + 1}/X1/", "NR": str(2 * (i + 1))})
+
+    # CCTV (3), AP (2), KD (1) — proste markery bez atrybutów.
+    for x, y in [(2000, 6000), (9000, 6000), (12000, 6000)]:
+        msp.add_blockref("DEV_RJ45", (x, y), dxfattribs={"layer": "PST_gniazda CCTV"})
+    for x, y in [(2500, 3000), (9500, 3000)]:
+        msp.add_blockref("DEV_RJ45", (x, y), dxfattribs={"layer": "PST_gniazda AP"})
+    msp.add_blockref("DEV_RJ45", (500, 4000), dxfattribs={"layer": "PST_kontrola dostępu"})
+
+    doc.saveas(path)
+    return path
+
+
 if __name__ == "__main__":
     here = os.path.dirname(os.path.abspath(__file__))
     c = make_clean(os.path.join(here, "sample_office_clean.dxf"))
     d = make_dirty(os.path.join(here, "sample_office_dirty.dxf"))
-    print("OK:", os.path.basename(c), "+", os.path.basename(d))
+    n = make_nested(os.path.join(here, "sample_nested_devices.dxf"))
+    print("OK:", os.path.basename(c), "+", os.path.basename(d), "+", os.path.basename(n))
