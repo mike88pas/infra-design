@@ -79,10 +79,14 @@ def main():
         print(f"  - {s['name'].encode('ascii', 'replace').decode()}: {s['area'] / 1e6:.1f} m2")
 
 
-def bake_client(server):
+def bake_client(server, anonymize=True):
     """Piecze realny rzut klienta (K+1) do client-floor.json: warstwy, pomieszczenia,
     INSERT-y urządzeń i trasy A*. Mapowanie warstw→systemy i BOM/kosztorys liczy się
-    LIVE w przeglądarce (ten sam kod TS co w aplikacji)."""
+    LIVE w przeglądarce (ten sam kod TS co w aplikacji).
+
+    anonymize=True (domyślnie): usuwa dane identyfikujące (nazwa projektu, nazwy
+    pomieszczeń, atrybuty IDFX) — artefakt webowy jest publiczny. Zostają liczby:
+    metraże, liczby urządzeń, długości kabli. Desktop używa realnego DXF wprost."""
     if not Path(CLIENT_DXF).exists():
         print(f"[client] pominięto — brak pliku {CLIENT_DXF}")
         return
@@ -107,11 +111,23 @@ def bake_client(server):
             src = dev["inserts"][r["sourceIndex"]]["at"]
             cable_routes.append({"at": src, "lengthM": r["length"] / 1000.0})
 
+    rooms_data = rooms["rooms"]
+    inserts_data = dev["inserts"]
+    meta_name = "Obiekt użyteczności publicznej — kondygnacja parter (demo)"
+    if anonymize:
+        # Usuń dane identyfikujące: nazwy pomieszczeń → generyczne, atrybuty INSERT → puste.
+        for rm in rooms_data:
+            rm["name"] = "Pomieszczenie"
+        for ins in inserts_data:
+            ins["attribs"] = {}
+    else:
+        meta_name = "Teatr w Rzeszowie — kondygnacja K+1 (parter)"
+
     payload = {
-        "meta": {"name": "Teatr w Rzeszowie — kondygnacja K+1 (parter)", "level": 1, "units": doc["units"], "unitMm": 1},
+        "meta": {"name": meta_name, "level": 1, "units": doc["units"], "unitMm": 1, "anonymized": anonymize},
         "layers": layers,
-        "rooms": rooms["rooms"],
-        "inserts": dev["inserts"],
+        "rooms": rooms_data,
+        "inserts": inserts_data,
         "cableRoutes": cable_routes,
         "cableTotalM": round(sum(c["lengthM"] for c in cable_routes), 1),
     }
