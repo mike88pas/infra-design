@@ -132,3 +132,31 @@ def test_route_cables_astar_avoids_and_measures(fixture_path):
 def test_route_cables_empty_without_targets(fixture_path):
     res = server._route_cables({"path": fixture_path, "sources": [{"x": 0, "y": 0}], "targets": []})
     assert res["routes"] == []
+
+
+def test_export_dxf_writes_readable(tmp_path):
+    import ezdxf
+
+    out = str(tmp_path / "instalacja.dxf")
+    res = server._export_dxf({
+        "path": out,
+        "devices": [
+            {"system": "lan", "typeKey": "lan.outlet.2x", "position": {"x": 1000, "y": 1000}},
+            {"system": "lan", "typeKey": "lan.ap", "position": {"x": 3000, "y": 1000}},
+            {"system": "cctv", "typeKey": "cctv.dome.4mp", "position": {"x": 2000, "y": 3000}},
+        ],
+        "routes": [{"path": [{"x": 1000, "y": 1000}, {"x": 5000, "y": 5000}], "system": "lan"}],
+        "rooms": [{"name": "1.11 Sala", "at": {"x": 2000, "y": 2000}}],
+        "cabinets": [{"x": 5000, "y": 5000}],
+        "legend": [{"label": "Gniazdo 2xRJ45", "count": 45}],
+        "meta": {"project": "Test", "drawing": "K+1", "designer": "Jan", "license": "1234"},
+    })
+    assert res["devices"] == 3 and res["routes"] == 1
+
+    doc = ezdxf.readfile(out)
+    layers = {l.dxf.name for l in doc.layers}
+    assert {"INSTAL-LAN", "INSTAL-CCTV", "INSTAL-AP", "INSTAL-TRASY", "INSTAL-LEGENDA"} <= layers
+    msp = doc.modelspace()
+    assert sum(1 for e in msp if e.dxftype() == "CIRCLE") == 1  # AP
+    assert any(e.dxftype() == "LWPOLYLINE" for e in msp)  # symbole/trasy
+    assert any(e.dxftype() == "TEXT" for e in msp)  # etykiety/legenda

@@ -142,6 +142,21 @@ function registerIpc(): void {
     }
   )
 
+  // Eksport rysunku instalacji do DXF (z dialogiem zapisu).
+  ipcMain.handle(
+    'dxf:export',
+    async (_e, params: Omit<Parameters<SidecarBridge['exportDxf']>[0], 'path'>) => {
+      const res = await dialog.showSaveDialog(mainWindow!, {
+        title: 'Eksportuj rysunek instalacji (DXF)',
+        defaultPath: `${params.meta?.drawing || 'instalacja'}.dxf`,
+        filters: [{ name: 'DXF', extensions: ['dxf'] }]
+      })
+      if (res.canceled || !res.filePath) return { exported: false }
+      const out = await getSidecar().exportDxf({ ...params, path: res.filePath })
+      return { exported: true, ...out }
+    }
+  )
+
   // Trasowanie kabli A* (urządzenia → szafy) → SidecarRouteResult.
   ipcMain.handle(
     'dxf:routeCables',

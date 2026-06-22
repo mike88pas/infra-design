@@ -180,6 +180,20 @@ export class SidecarBridge {
     return this.request('extract_rooms', params, 120_000)
   }
 
+  /** Eksport rysunku instalacji do DXF (overlay z symbolami + legendą). */
+  exportDxf(params: {
+    path: string
+    devices: Array<{ system: string; typeKey: string; position: Pt }>
+    routes: Array<{ path: Pt[]; system: string }>
+    rooms: Array<{ name: string; at: Pt }>
+    cabinets: Pt[]
+    legend: Array<{ label: string; count: number }>
+    meta: Record<string, string>
+    symbolSize?: number
+  }): Promise<{ path: string; devices: number; routes: number }> {
+    return this.request('export_dxf', params, 120_000)
+  }
+
   /** Trasowanie kabli A* od urządzeń do najbliższej szafy. */
   routeCables(params: {
     path: string

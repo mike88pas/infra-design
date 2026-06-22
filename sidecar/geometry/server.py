@@ -792,6 +792,134 @@ def _nearest_free(cell, blocked, w, h, max_r=8):
     return None
 
 
+# ── export_dxf ────────────────────────────────────────────────────────────
+
+# Warstwy rysunku instalacji (nazwa → kolor ACI).
+_EXPORT_LAYERS = {
+    "INSTAL-LAN": 5, "INSTAL-CCTV": 1, "INSTAL-KD": 3, "INSTAL-AP": 4,
+    "INSTAL-TRASY": 8, "INSTAL-SZAFY": 2, "INSTAL-OPIS": 7, "INSTAL-LEGENDA": 7,
+}
+
+
+def _device_layer(system: str, type_key: str) -> str:
+    if type_key.startswith("lan.ap"):
+        return "INSTAL-AP"
+    return {"lan": "INSTAL-LAN", "cctv": "INSTAL-CCTV", "kd": "INSTAL-KD"}.get(system, "INSTAL-OPIS")
+
+
+def _draw_symbol(msp, system, type_key, x, y, s):
+    """Symbol urządzenia: AP=okrąg, CCTV=trójkąt, reszta=kwadrat (bok 2·s)."""
+    layer = _device_layer(system, type_key)
+    if type_key.startswith("lan.ap"):
+        msp.add_circle((x, y), s, dxfattribs={"layer": layer})
+    elif system == "cctv":
+        msp.add_lwpolyline([(x - s, y - s), (x + s, y - s), (x, y + s)], close=True, dxfattribs={"layer": layer})
+    else:
+        msp.add_lwpolyline(
+            [(x - s, y - s), (x + s, y - s), (x + s, y + s), (x - s, y + s)],
+            close=True, dxfattribs={"layer": layer},
+        )
+
+
+@handler("export_dxf")
+def _export_dxf(params):
+    """
+    Zapisuje rysunek instalacji do DXF (overlay nakładany na podkład w CAD; docelowo XREF).
+    Symbole per system, trasy jako polilinie, etykiety pomieszczeń, szafy, legenda + tabelka.
+
+    params: {
+        "path": str,                         # plik wyjściowy .dxf
+        "devices": [{system,typeKey,position:{x,y}}],
+        "routes": [{path:[{x,y}], system}],
+        "rooms": [{name, at:{x,y}}],
+        "cabinets": [{x,y}],
+        "legend": [{label, count}],
+        "meta": {project, drawing, designer, license},
+        "symbolSize": float?                 # połowa boku symbolu (domyślnie 250 mm)
+    }
+    return: { path, devices, routes }
+    """
+    import ezdxf  # type: ignore
+
+    out = params.get("path")
+    if not out:
+        raise ValueError("export_dxf: brak parametru 'path'")
+    devices = params.get("devices", [])
+    routes = params.get("routes", [])
+    rooms = params.get("rooms", [])
+    cabinets = params.get("cabinets", [])
+    legend = params.get("legend", [])
+    meta = params.get("meta", {})
+    s = float(params.get("symbolSize", 250))
+
+    doc = ezdxf.new("R2018", setup=True)
+    doc.header["$INSUNITS"] = 4  # mm
+    msp = doc.modelspace()
+    for name, color in _EXPORT_LAYERS.items():
+        if name not in doc.layers:
+            doc.layers.add(name, color=color)
+
+    bbox = _BBox()
+
+    # Trasy (pod spodem)
+    for r in routes:
+        pts = [(q["x"], q["y"]) for q in r.get("path", [])]
+        if len(pts) >= 2:
+            msp.add_lwpolyline(pts, dxfattribs={"layer": "INSTAL-TRASY"})
+            for x, y in pts:
+                bbox.add(x, y)
+
+    # Urządzenia
+    for d in devices:
+        p = d["position"]
+        _draw_symbol(msp, d.get("system", ""), d.get("typeKey", ""), p["x"], p["y"], s)
+        bbox.add(p["x"], p["y"])
+
+    # Szafy/IDF — większy kwadrat z opisem
+    for c in cabinets:
+        x, y = c["x"], c["y"]
+        msp.add_lwpolyline(
+            [(x - s * 2, y - s * 2), (x + s * 2, y - s * 2), (x + s * 2, y + s * 2), (x - s * 2, y + s * 2)],
+            close=True, dxfattribs={"layer": "INSTAL-SZAFY"},
+        )
+        msp.add_text("IDF", height=s * 1.2, dxfattribs={"layer": "INSTAL-SZAFY"}).set_placement((x - s * 1.5, y))
+        bbox.add(x, y)
+
+    # Etykiety pomieszczeń
+    for rm in rooms:
+        at = rm.get("at", {})
+        if "x" in at:
+            msp.add_text(rm.get("name", ""), height=s * 0.9, dxfattribs={"layer": "INSTAL-OPIS"}).set_placement(
+                (at["x"], at["y"])
+            )
+
+    # Legenda + tabelka projektu — na prawo od rysunku
+    if bbox._set:
+        lx = bbox.maxx + s * 12
+        ly = bbox.maxy
+        lh = s * 5  # odstęp wierszy
+        msp.add_text("LEGENDA", height=s * 2.4, dxfattribs={"layer": "INSTAL-LEGENDA"}).set_placement((lx, ly))
+        row = ly - lh * 1.5
+        for item in legend:
+            txt = f"{item.get('label', '')} — {item.get('count', 0)} szt"
+            msp.add_text(txt, height=s * 1.8, dxfattribs={"layer": "INSTAL-LEGENDA"}).set_placement((lx + s * 4, row))
+            row -= lh
+        # Tabelka projektu
+        row -= lh
+        for line in [
+            f"Projekt: {meta.get('project', '')}",
+            f"Rysunek: {meta.get('drawing', '')}",
+            f"Projektant: {meta.get('designer', '')}  upr. {meta.get('license', '')}",
+            "Podpis: ........................................",
+            "UWAGA: rysunek wspomaga projektanta — nie zastępuje autoryzacji projektu.",
+        ]:
+            msp.add_text(line, height=s * 1.6, dxfattribs={"layer": "INSTAL-LEGENDA"}).set_placement((lx, row))
+            row -= lh
+
+    doc.saveas(out)
+    return {"path": out, "devices": len(devices), "routes": len(routes)}
+
+
 # ── pętla protokołu ─────────────────────────────────────────────────────────
 
 def dispatch(method: str, params: dict):

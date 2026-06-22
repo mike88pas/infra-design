@@ -15,6 +15,7 @@ import { roomsToSpaces } from '../../domain/dxf/rooms'
 import { devicesFromInserts, countByTypeKey } from '../../domain/installations/fromDxf'
 import { buildBom } from '../../domain/installations/bom'
 import { buildCost, PLN, type CostSummary } from '../../domain/installations/cost'
+import { CATALOG } from '../../domain/installations/catalog'
 import { buildCableRoutes } from '../../domain/installations/routing'
 import { runAudit } from '../../domain/norms/audit'
 import { INSTALLATION_RULES } from '../../domain/norms/rules'
@@ -370,6 +371,56 @@ export default function App(): JSX.Element {
     })
   }
 
+  /** Eksport rysunku instalacji (overlay) do DXF — symbole, trasy, etykiety, legenda. */
+  async function exportDrawing(): Promise<void> {
+    if (!bundle || !bundle.devices.length) {
+      setStatus({ kind: 'idle', text: 'Brak urządzeń do eksportu — najpierw zaprojektuj/zaimportuj' })
+      return
+    }
+    setStatus({ kind: 'idle', text: 'Eksportuję rysunek DXF…' })
+    try {
+      const devices = bundle.devices.map((d) => ({ system: d.system, typeKey: d.typeKey, position: d.position }))
+      const routes = bundle.routes.map((r) => ({ path: r.path, system: r.system }))
+      const rooms = bundle.spaces
+        .filter((s) => s.polygon.length)
+        .map((s) => ({ name: s.name, at: centroid(s.polygon) }))
+      // Szafy = unikalne końce tras
+      const seen = new Set<string>()
+      const cabinets: Array<{ x: number; y: number }> = []
+      for (const r of bundle.routes) {
+        const p = r.path[r.path.length - 1]
+        if (!p) continue
+        const k = `${Math.round(p.x)},${Math.round(p.y)}`
+        if (!seen.has(k)) {
+          seen.add(k)
+          cabinets.push(p)
+        }
+      }
+      // Legenda z liczby urządzeń per typ (opis z katalogu)
+      const counts = new Map<string, number>()
+      for (const d of bundle.devices) counts.set(d.typeKey, (counts.get(d.typeKey) ?? 0) + 1)
+      const legend = [...counts].map(([k, c]) => ({ label: CATALOG[k]?.description ?? k, count: c }))
+      const des = bundle.designers[0]
+      const res = await window.infra.dxf.export({
+        devices,
+        routes,
+        rooms,
+        cabinets,
+        legend,
+        meta: {
+          project: bundle.project.name,
+          drawing: 'Instalacje niskoprądowe',
+          designer: des?.fullName ?? '',
+          license: des?.licenseNo ?? ''
+        }
+      })
+      if (res.exported) setStatus({ kind: 'ok', text: `Wyeksportowano DXF: ${res.path} (${res.devices} urządzeń)` })
+      else setStatus({ kind: 'idle', text: 'Eksport anulowany' })
+    } catch (e) {
+      setStatus({ kind: 'err', text: `Eksport DXF: ${(e as Error).message}` })
+    }
+  }
+
   function toggleLayer(name: string): void {
     setLayerVisibility((v) => ({ ...v, [name]: !v[name] }))
   }
@@ -443,6 +494,10 @@ export default function App(): JSX.Element {
 
           <button onClick={importInstallations} className="rounded bg-emerald-400/15 px-4 py-2 text-sm font-medium text-emerald-300 hover:bg-emerald-400/25">
             Importuj / Zaprojektuj instalacje (kreator)
+          </button>
+
+          <button onClick={exportDrawing} disabled={!bundle?.devices.length} className="rounded bg-white/10 px-3 py-2 text-xs hover:bg-white/15 disabled:opacity-30">
+            Eksportuj rysunek DXF
           </button>
 
           {doc && (

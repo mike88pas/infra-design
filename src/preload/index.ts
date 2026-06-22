@@ -48,7 +48,16 @@ const api = {
       explodeBlocks?: boolean
       cell?: number
       inflate?: number
-    }): Promise<SidecarRouteResult> => ipcRenderer.invoke('dxf:routeCables', params)
+    }): Promise<SidecarRouteResult> => ipcRenderer.invoke('dxf:routeCables', params),
+    export: (params: {
+      devices: Array<{ system: string; typeKey: string; position: { x: number; y: number } }>
+      routes: Array<{ path: { x: number; y: number }[]; system: string }>
+      rooms: Array<{ name: string; at: { x: number; y: number } }>
+      cabinets: { x: number; y: number }[]
+      legend: Array<{ label: string; count: number }>
+      meta: Record<string, string>
+    }): Promise<{ exported: boolean; path?: string; devices?: number; routes?: number }> =>
+      ipcRenderer.invoke('dxf:export', params)
   },
   project: {
     new: (name: string): Promise<ProjectBundle> => ipcRenderer.invoke('project:new', name),
