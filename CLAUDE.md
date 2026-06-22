@@ -37,4 +37,10 @@ Renderer (React + Generic CAD Core[@core] + plugins) ─IPC(contextBridge)→ Ma
 Sidecar: patrz `sidecar/README.md` (venv + `INFRA_PYTHON` by wskazać interpreter).
 
 ## Status
-**F0 scaffold.** Roadmapa: `docs/ROADMAP.md`. Następne: F1 (import DXF + render PixiJS + polygonize).
+**F1 DONE** (import DXF + render PixiJS + polygonize + mapowanie warstw + kalibracja). Równolegle
+ruszyło F2 (instalacje→BOM→kosztorys, `src/domain/installations/`). Roadmapa: `docs/ROADMAP.md`.
+Następne: punkt styku F1↔F2 (nanoszenie `Device[]` w wykrytych `Space`, trasowanie).
+
+**Demo dla klienta:** webowy target `web/` (reużywa `@core/cad`) live na
+**https://infra-design-app.web.app** (Firebase Hosting, projekt `infra-design-app`). Pipeline:
+`npm run web:bake && npm run web:build && firebase deploy --only hosting`. Szczegóły: `docs/WEB_DEMO.md`.

@@ -3,9 +3,14 @@
 Ten plik = punkt startu dla osoby/instancji przejmującej projekt. Czytaj w kolejności:
 `CLAUDE.md` → `docs/ROADMAP.md` → `docs/SYSTEMS.md` → ten plik.
 
-## Stan na teraz (F0 DONE)
+## Stan na teraz (F1 DONE, F2 w toku)
 - Repo: **github.com/mike88pas/infra-design**, branch `main`, CI Windows aktywny.
-- Build/typecheck/lint/test (5/5) zielone. Handshake sidecara: **ezdxf 1.4.4**.
+- **F1 ukończone**: sidecar `import_dxf`/`polygonize` (ezdxf 1.4.4 + Shapely), renderer
+  PixiJS w `src/core/cad/` (pan/zoom, warstwy, RBush, LOD, hit-test), mapowanie warstw
+  (heurystyka nazw), kalibracja skali. Testy: pytest sidecara + kontrakt mostu TS↔Python.
+- **F2 ruszyło równolegle** (`src/domain/installations/`: catalog/bom/cost) — patrz `docs/WORKSTREAMS.md`.
+- **Demo dla klienta live**: `web/` (reużywa `@core/cad`) → **https://infra-design-app.web.app**
+  (Firebase Hosting, projekt `infra-design-app`). Szczegóły: `docs/WEB_DEMO.md`.
 - Pilot MVP = **LAN + CCTV**. Rdzeń CAD generyczny, instalacje jako plugin.
 - Zasada twarda: software **wspomaga projektanta** (nie podpisuje projektu).
 
@@ -40,9 +45,9 @@ Sanity check: w aplikacji „Test sidecara (ping)" → powinno pokazać `ezdxf x
 | UI | `src/renderer/src/App.tsx` |
 | Sidecar geometrii (Python) | `sidecar/geometry/server.py` |
 
-## F1 — następny krok (import DXF + render + pomieszczenia)
+## F1 — ZROBIONE (import DXF + render + pomieszczenia)
 
-Cel: wczytać rzut DXF, renderować płynnie, wykryć pomieszczenia. Po kolei:
+Zrealizowane (referencja, gdyby trzeba wrócić). Kolejne kroki — patrz „Następny krok" niżej.
 
 1. **Sidecar `import_dxf`** — w `server.py` dodaj metodę: ezdxf wczytuje DXF, zwraca warstwy +
    encje (LINE/LWPOLYLINE/INSERT) + bbox w lekkim JSON. Duże pliki → `ezdxf.iterdxf` przy potrzebie.
@@ -57,7 +62,12 @@ Cel: wczytać rzut DXF, renderować płynnie, wykryć pomieszczenia. Po kolei:
 
 Rozszerz model w `schema.ts` ostrożnie; przy zmianie łamiącej bump `SCHEMA_VERSION` + migracja w `project.ts`.
 
-## Dalej (po F1): F2 LAN+BOM → F3 kosztorys+eksport (PILOT) → F4 CCTV+rack → F5 normy
+## Następny krok: punkt styku F1↔F2
+F1 daje `Space[]` z DXF; F2 buduje katalog/BOM/kosztorys. Integracja: użytkownik nanosi
+`Device[]` w wykrytych `Space`, prowadzi `CableRoute[]`, silnik liczy `BomItem[]`→`CostItem[]`.
+Oba lany dojrzewały niezależnie — to mały krok wiążący (patrz `docs/WORKSTREAMS.md`).
+
+## Dalej: F2 LAN+BOM → F3 kosztorys+eksport (PILOT) → F4 CCTV+rack → F5 normy
 Pełna roadmapa: `docs/ROADMAP.md`. Plan każdego kolejnego systemu (trasy, SSWiN, KD, elektryka,
 SAP, DSO, BMS) z typami urządzeń, normami, kalkulatorami i schematami: `docs/SYSTEMS.md`.
 

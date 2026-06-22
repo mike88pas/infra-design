@@ -6,7 +6,7 @@ Kamień milowy komercyjny = koniec **F3** (pierwsza pełna oferta z rzutu DXF u 
 | Faza | Zakres | Wynik testowalny |
 |---|---|---|
 | **F0 Scaffold** ✅ | Electron + React/TS + sidecar Python (handshake), CI Windows, model danych v1, paczka `.infra` (SQLite) | App startuje, sidecar odpowiada, projekt round-trip |
-| **F1 DXF + Render** | ezdxf import/eksport, PixiJS renderer + LOD + RBush, warstwy, viewport, kalibracja skali, Shapely polygonize → Space | Wczytanie ciężkiego DXF, płynny pan/zoom, wykryte pomieszczenia |
+| **F1 DXF + Render** ✅ | ezdxf import, PixiJS renderer + LOD + RBush, warstwy, viewport, kalibracja skali, Shapely polygonize → Space | Wczytanie DXF, płynny pan/zoom, wykryte pomieszczenia |
 | **F2 LAN + BOM** | Generic CAD core + PluginRegistry; plugin LAN: palety, punkty, naniesienie, trasy, długości, BOM | Projekt LAN z realnym BOM |
 | **F3 Kosztorys + Eksport** | BOM→KNR, import cennika DBF, kosztorys; eksport PDF/XLS/Word/DXF; pola projektanta | **Pilot**: pełna oferta z DXF |
 | **F4 CCTV + Rack** | plugin CCTV (FOV/DORI), auto-routing A*, widok szafy rack 2D, schemat | Projekt CCTV + rack + schemat |

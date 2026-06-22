@@ -3,7 +3,6 @@ import {
   createEmptyBundle,
   createEmptyProject,
   type CableRoute,
-  type Device,
   type ProjectBundle
 } from '@domain/model/schema'
 import { buildExportDocument, LEGAL_DISCLAIMER } from './document'
