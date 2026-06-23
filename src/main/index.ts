@@ -11,6 +11,7 @@ import { randomUUID } from 'node:crypto'
 import { SidecarBridge } from './sidecar'
 import { saveProject, loadProject } from './project'
 import { securityRoots, vouchPath, authorizeReadFile, authorizeWriteFile } from './paths'
+import * as keystore from './crypto/keystore'
 import { createEmptyBundle, createEmptyProject, type ProjectBundle } from '@domain/model/schema'
 
 let mainWindow: BrowserWindow | null = null
@@ -39,11 +40,20 @@ function createWindow(): void {
       preload: join(__dirname, '../preload/index.js'),
       contextIsolation: true,
       nodeIntegration: false,
-      sandbox: false
+      sandbox: true,
+      webSecurity: true,
+      allowRunningInsecureContent: false,
+      experimentalFeatures: false
     }
   })
 
   mainWindow.on('ready-to-show', () => mainWindow?.show())
+
+  // Blokada nawigacji i otwierania okien — renderer ma zostać przy swoim ładunku
+  // (brak wycieku do zewnętrznych URL-i, brak okien-skoczków).
+  mainWindow.webContents.on('will-navigate', (e) => e.preventDefault())
+  mainWindow.webContents.setWindowOpenHandler(() => ({ action: 'deny' }))
+  mainWindow.webContents.on('will-attach-webview', (e) => e.preventDefault())
 
   const devUrl = process.env['ELECTRON_RENDERER_URL']
   if (devUrl) {
@@ -51,6 +61,38 @@ function createWindow(): void {
   } else {
     mainWindow.loadFile(join(__dirname, '../renderer/index.html'))
   }
+}
+
+/** Strażnik: wrażliwe kanały działają dopiero po odblokowaniu hasłem. */
+function ensureUnlocked(): void {
+  if (!keystore.isUnlocked()) throw new Error('Aplikacja zablokowana — odblokuj hasłem')
+}
+
+// ── Brama dostępu (logowanie) ──────────────────────────────────────────────
+function registerSecurityIpc(): void {
+  // Stan bramy: czy hasło już ustawione i czy odblokowano.
+  ipcMain.handle('security:status', async () => ({
+    initialized: keystore.isInitialized(),
+    unlocked: keystore.isUnlocked()
+  }))
+
+  // Pierwsze uruchomienie — ustaw hasło (i odblokuj).
+  ipcMain.handle('security:setup', async (_e, password: string) => {
+    keystore.setupPassword(password)
+    return { ok: true }
+  })
+
+  // Odblokowanie istniejącym hasłem.
+  ipcMain.handle('security:unlock', async (_e, password: string) => {
+    const ok = keystore.unlock(password)
+    return { ok }
+  })
+
+  // Zablokuj (usuń klucz z pamięci).
+  ipcMain.handle('security:lock', async () => {
+    keystore.lock()
+    return { ok: true }
+  })
 }
 
 // ── Rejestracja kanałów IPC ────────────────────────────────────────────────
@@ -62,6 +104,7 @@ function registerIpc(): void {
 
   // Nowy pusty projekt.
   ipcMain.handle('project:new', async (_e, name: string) => {
+    ensureUnlocked()
     const project = createEmptyProject({
       id: randomUUID(),
       name: name || 'Nowy projekt',
@@ -72,6 +115,7 @@ function registerIpc(): void {
 
   // Zapis do pliku .infra (z dialogiem jeśli brak ścieżki).
   ipcMain.handle('project:save', async (_e, bundle: ProjectBundle, filePath?: string) => {
+    ensureUnlocked()
     let target = filePath
     if (!target) {
       const res = await dialog.showSaveDialog(mainWindow!, {
@@ -82,12 +126,13 @@ function registerIpc(): void {
       if (res.canceled || !res.filePath) return { saved: false }
       target = res.filePath
     }
-    await saveProject(target, bundle)
+    await saveProject(target, bundle, keystore.getMasterKey())
     return { saved: true, filePath: target }
   })
 
   // Wczytanie z pliku .infra (z dialogiem jeśli brak ścieżki).
   ipcMain.handle('project:open', async (_e, filePath?: string) => {
+    ensureUnlocked()
     let target = filePath
     if (!target) {
       const res = await dialog.showOpenDialog(mainWindow!, {
@@ -98,12 +143,13 @@ function registerIpc(): void {
       if (res.canceled || !res.filePaths.length) return { opened: false }
       target = res.filePaths[0]
     }
-    const bundle = await loadProject(target)
-    return { opened: true, filePath: target, bundle }
+    const { bundle, migratedFromPlain } = await loadProject(target, keystore.getMasterKey())
+    return { opened: true, filePath: target, bundle, migratedFromPlain }
   })
 
   // Import rzutu DXF (z dialogiem jeśli brak ścieżki) → DxfDocument.
   ipcMain.handle('dxf:import', async (_e, filePath?: string) => {
+    ensureUnlocked()
     let target = filePath
     if (!target) {
       const res = await dialog.showOpenDialog(mainWindow!, {
@@ -127,6 +173,7 @@ function registerIpc(): void {
       _e,
       params: { path: string; wallLayers?: string[]; explodeBlocks?: boolean; snap?: number; minArea?: number }
     ) => {
+      ensureUnlocked()
       const _allowedRoots = authorizeReadFile(params.path)
       return getSidecar().polygonize({ ...params, _allowedRoots })
     }
@@ -136,6 +183,7 @@ function registerIpc(): void {
   ipcMain.handle(
     'dxf:extractDevices',
     async (_e, params: { path: string; layers?: string[]; includeAttribs?: boolean }) => {
+      ensureUnlocked()
       const _allowedRoots = authorizeReadFile(params.path)
       return getSidecar().extractDevices({ ...params, _allowedRoots })
     }
@@ -145,6 +193,7 @@ function registerIpc(): void {
   ipcMain.handle(
     'dxf:extractRooms',
     async (_e, params: { path: string; areaLayers?: string[]; explodeBlocks?: boolean }) => {
+      ensureUnlocked()
       const _allowedRoots = authorizeReadFile(params.path)
       return getSidecar().extractRooms({ ...params, _allowedRoots })
     }
@@ -154,6 +203,7 @@ function registerIpc(): void {
   ipcMain.handle(
     'dxf:export',
     async (_e, params: Omit<Parameters<SidecarBridge['exportDxf']>[0], 'path'>) => {
+      ensureUnlocked()
       const res = await dialog.showSaveDialog(mainWindow!, {
         title: 'Eksportuj rysunek instalacji (DXF)',
         defaultPath: `${params.meta?.drawing || 'instalacja'}.dxf`,
@@ -182,6 +232,7 @@ function registerIpc(): void {
         inflate?: number
       }
     ) => {
+      ensureUnlocked()
       const _allowedRoots = authorizeReadFile(params.path)
       return getSidecar().routeCables({ ...params, _allowedRoots })
     }
@@ -189,6 +240,7 @@ function registerIpc(): void {
 }
 
 app.whenReady().then(() => {
+  registerSecurityIpc()
   registerIpc()
   createWindow()
 

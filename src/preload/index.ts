@@ -18,6 +18,16 @@ const api = {
     ping: (): Promise<{ pong: boolean; ezdxf: string; python: string }> =>
       ipcRenderer.invoke('sidecar:ping')
   },
+  // Brama dostępu (logowanie) — hasło chroni i szyfruje projekty at-rest.
+  security: {
+    status: (): Promise<{ initialized: boolean; unlocked: boolean }> =>
+      ipcRenderer.invoke('security:status'),
+    setup: (password: string): Promise<{ ok: boolean }> =>
+      ipcRenderer.invoke('security:setup', password),
+    unlock: (password: string): Promise<{ ok: boolean }> =>
+      ipcRenderer.invoke('security:unlock', password),
+    lock: (): Promise<{ ok: boolean }> => ipcRenderer.invoke('security:lock')
+  },
   dxf: {
     import: (
       filePath?: string
@@ -68,8 +78,12 @@ const api = {
       ipcRenderer.invoke('project:save', bundle, filePath),
     open: (
       filePath?: string
-    ): Promise<{ opened: boolean; filePath?: string; bundle?: ProjectBundle }> =>
-      ipcRenderer.invoke('project:open', filePath)
+    ): Promise<{
+      opened: boolean
+      filePath?: string
+      bundle?: ProjectBundle
+      migratedFromPlain?: boolean
+    }> => ipcRenderer.invoke('project:open', filePath)
   }
 }
 

@@ -15,6 +15,8 @@ import { dirname, join } from 'node:path'
 import { createRequire } from 'node:module'
 import initSqlJs, { type Database, type SqlJsStatic } from 'sql.js'
 import { SCHEMA_VERSION, type ProjectBundle } from '@domain/model/schema'
+import { parseProjectBundle, MAX_JSON_BYTES } from '@domain/model/validate'
+import { encryptBundle, decryptBundle, isEncrypted, isLegacyPlain } from './crypto/container'
 
 const require = createRequire(import.meta.url)
 
@@ -40,37 +42,70 @@ function writeBundle(db: Database, bundle: ProjectBundle): void {
   db.run('INSERT INTO doc (id, json) VALUES (1, ?)', [JSON.stringify(bundle)])
 }
 
-/** Zapisuje ProjectBundle do pliku `.infra` (SQLite). */
-export async function saveProject(filePath: string, bundle: ProjectBundle): Promise<void> {
+/**
+ * Wynik wczytania paczki — bundle + informacja, czy plik był jeszcze niezaszyfrowany
+ * (stara paczka). UI może wtedy zaproponować ponowny zapis (już zaszyfrowany).
+ */
+export interface LoadedProject {
+  bundle: ProjectBundle
+  migratedFromPlain: boolean
+}
+
+/**
+ * Zapisuje ProjectBundle do pliku `.infra`. Bajty bazy SQLite są szyfrowane at-rest
+ * kluczem głównym (AES-256-GCM, patrz crypto/container.ts). Klucz dostarcza proces
+ * główny z keystore — paczka NIGDY nie leży jawnie na dysku.
+ */
+export async function saveProject(filePath: string, bundle: ProjectBundle, key: Buffer): Promise<void> {
   const SQL = await getSql()
   const db = new SQL.Database()
   try {
     writeBundle(db, bundle)
-    const data = db.export() // Uint8Array
-    await writeFile(filePath, Buffer.from(data))
+    const data = db.export() // Uint8Array (jawny SQLite)
+    const enc = encryptBundle(key, data) // kontener INFRA1
+    await writeFile(filePath, enc)
   } finally {
     db.close()
   }
 }
 
-/** Wczytuje ProjectBundle z pliku `.infra`. */
-export async function loadProject(filePath: string): Promise<ProjectBundle> {
+/**
+ * Wczytuje ProjectBundle z pliku `.infra`. Obsługuje zaszyfrowane paczki (INFRA1)
+ * oraz — wstecznie — stare jawne pliki SQLite (oznaczane jako `migratedFromPlain`).
+ * Zawartość jest walidowana (parseProjectBundle) zanim trafi do aplikacji.
+ */
+export async function loadProject(filePath: string, key: Buffer): Promise<LoadedProject> {
   const SQL = await getSql()
   const fileBuf = await readFile(filePath)
-  const db = new SQL.Database(new Uint8Array(fileBuf))
+
+  let sqliteBytes: Uint8Array
+  let migratedFromPlain = false
+  if (isEncrypted(fileBuf)) {
+    sqliteBytes = new Uint8Array(decryptBundle(key, fileBuf))
+  } else if (isLegacyPlain(fileBuf)) {
+    sqliteBytes = new Uint8Array(fileBuf) // stara paczka — wczytaj, zaproponuj re-save
+    migratedFromPlain = true
+  } else {
+    throw new Error('Nierozpoznany format pliku .infra (ani zaszyfrowany, ani SQLite)')
+  }
+
+  const db = new SQL.Database(sqliteBytes)
   try {
     const res = db.exec('SELECT json FROM doc WHERE id = 1')
     if (!res.length || !res[0].values.length) {
       throw new Error('Plik .infra nie zawiera danych projektu')
     }
     const json = res[0].values[0][0] as string
-    const bundle = JSON.parse(json) as ProjectBundle
+    if (typeof json !== 'string' || json.length > MAX_JSON_BYTES) {
+      throw new Error('Dane projektu są uszkodzone lub zbyt duże')
+    }
+    const bundle = parseProjectBundle(JSON.parse(json))
     if (bundle.project.schemaVersion > SCHEMA_VERSION) {
       throw new Error(
         `Plik utworzony nowszą wersją schematu (${bundle.project.schemaVersion} > ${SCHEMA_VERSION})`
       )
     }
-    return bundle
+    return { bundle, migratedFromPlain }
   } finally {
     db.close()
   }
