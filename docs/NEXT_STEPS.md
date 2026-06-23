@@ -3,16 +3,23 @@
 Ten plik = punkt startu dla osoby/instancji przejmującej projekt. Czytaj w kolejności:
 `CLAUDE.md` → `docs/ROADMAP.md` → `docs/SYSTEMS.md` → ten plik.
 
-## Stan na teraz (F1 DONE, F2 w toku)
-- Repo: **github.com/mike88pas/infra-design**, branch `main`, CI Windows aktywny.
+## Stan na teraz (F1 DONE, F2 DONE, bezpieczeństwo utwardzone)
+- Repo: **github.com/mike88pas/infra-design** (PRYWATNE), branch `main`, CI Windows aktywny.
 - **F1 ukończone**: sidecar `import_dxf`/`polygonize` (ezdxf 1.4.4 + Shapely), renderer
-  PixiJS w `src/core/cad/` (pan/zoom, warstwy, RBush, LOD, hit-test), mapowanie warstw
-  (heurystyka nazw), kalibracja skali. Testy: pytest sidecara + kontrakt mostu TS↔Python.
-- **F2 ruszyło równolegle** (`src/domain/installations/`: catalog/bom/cost) — patrz `docs/WORKSTREAMS.md`.
-- **Demo dla klienta live**: `web/` (reużywa `@core/cad`) → **https://infra-design-app.web.app**
-  (Firebase Hosting, projekt `infra-design-app`). Szczegóły: `docs/WEB_DEMO.md`.
-- Pilot MVP = **LAN + CCTV**. Rdzeń CAD generyczny, instalacje jako plugin.
-- Zasada twarda: software **wspomaga projektanta** (nie podpisuje projektu).
+  PixiJS w `src/core/cad/` (pan/zoom, warstwy, RBush, LOD, hit-test), mapowanie warstw, kalibracja.
+- **F2 ukończone** (`src/domain/installations/`): w obie strony —
+  - **Ekstrakcja** z realnego rzutu (`PST_*` → urządzenia → BOM → kosztorys → audyt norm),
+  - **Forward-design** „od zera" (`autodesign.ts`: z wykazu pomieszczeń generuje LAN+CCTV),
+  - **Realny katalog** (Fibrain/Ubiquiti/Hikvision/ZPAS), walidacja PN-EN 50173, **eksport DXF**.
+  - Kreator importu (`ImportWizard.tsx`) ma tryb **extract / autodesign**.
+- **BEZPIECZEŃSTWO (produkcja desktop-local, NDA)** — patrz `docs/SECURITY.md`:
+  - Brama hasła (scrypt) + szyfrowanie `.infra` at-rest (AES-256-GCM, `src/main/crypto/`).
+  - Walidacja ścieżek sidecara (`safepath.py` + `paths.ts`) i paczki (`validate.ts`).
+  - `sandbox:true`, CSP, blokada nawigacji; strażnik repo (`.gitignore` + pre-commit).
+  - **Pliki klienta NIGDY nie opuszczają komputera. NIGDY nie commituj *.dxf/*.dwg/*.infra.**
+- **Demo webowe** (publiczne, ZANONIMIZOWANE): `web/` → **https://infra-design-app.web.app**
+  (Firebase Hosting `infra-design-app`). Szczegóły: `docs/WEB_DEMO.md`.
+- Pilot MVP = **LAN + CCTV**. Zasada twarda: software **wspomaga projektanta** (nie podpisuje).
 
 ## Pierwsze uruchomienie w nowej instancji
 ```bash
@@ -27,8 +34,27 @@ pip install -r sidecar/requirements.txt
 $env:INFRA_PYTHON = "$PWD\sidecar\.venv\Scripts\python.exe"   # PowerShell
 npm run dev
 ```
+**Pierwszy start = brama hasła.** Przy pierwszym uruchomieniu aplikacja poprosi o **ustawienie
+hasła** (min. 8 znaków). Hasło szyfruje wszystkie projekty `.infra` — **nie ma odzyskiwania**.
+Kolejne starty: ekran odblokowania. (Plik `userData/keyfile.json` = sól + weryfikator, NIGDY klucz.)
+
 Sanity check: w aplikacji „Test sidecara (ping)" → powinno pokazać `ezdxf x.y.z`.
-„Nowy projekt" → „Zapisz" → „Otwórz" = round-trip `.infra`.
+„Nowy projekt" → „Zapisz" → „Otwórz" = round-trip `.infra` (zapisany plik zaczyna się od `INFRA1`).
+
+## ▶ Projektowanie NOWEGO pliku klienta (workflow „od zera")
+Klient przysłał rzut + wytyczne (LAN+CCTV, reguły mieszane, rezultat: Rysunki PW + BOM + kosztorys).
+Tor pracy w aplikacji desktop:
+1. **Plik klienta zostaje lokalnie** — skopiuj DXF/DWG do katalogu projektu (np. `~/Documents/InfraDesign/`).
+   DWG → DXF: ODA File Converter (`ACAD2018`/`DXF`); patrz `[[client-file-teatr-rzeszow]]` w pamięci.
+2. **Import** → „Importuj projekt + instalacje (kreator)" → wybierz tryb:
+   - **autodesign** („od zera"): z wykazu pomieszczeń stawia urządzenia wg reguł (1 gniazdo/10 m²,
+     AP≥30 m², kamera≥40 m²), reguły nadpisywalne wytycznymi klienta;
+   - **extract**: jeśli klient dał już naniesione `PST_*`.
+3. Pipeline liczy: pomieszczenia → urządzenia → trasy A* → **BOM** → **kosztorys** → **audyt norm**.
+4. **Eksport DXF** („Eksportuj rysunek DXF") = overlay instalacji (docelowo XREF na podkład).
+5. Zapis projektu → `.infra` (zaszyfrowany). 
+Kod: `src/renderer/src/App.tsx` (runImport), `src/domain/installations/{autodesign,fromDxf,routing,bom,cost}.ts`,
+`src/domain/dxf/{importProfile,systemMapping,rooms}.ts`. Sidecar: `extract_rooms/extract_devices/route_cables/export_dxf`.
 
 ## Mapa kodu (gdzie co jest)
 | Obszar | Plik |
@@ -62,10 +88,12 @@ Zrealizowane (referencja, gdyby trzeba wrócić). Kolejne kroki — patrz „Nas
 
 Rozszerz model w `schema.ts` ostrożnie; przy zmianie łamiącej bump `SCHEMA_VERSION` + migracja w `project.ts`.
 
-## Następny krok: punkt styku F1↔F2
-F1 daje `Space[]` z DXF; F2 buduje katalog/BOM/kosztorys. Integracja: użytkownik nanosi
-`Device[]` w wykrytych `Space`, prowadzi `CableRoute[]`, silnik liczy `BomItem[]`→`CostItem[]`.
-Oba lany dojrzewały niezależnie — to mały krok wiążący (patrz `docs/WORKSTREAMS.md`).
+## Następny krok: pełne „Rysunki PW" (po pierwszym realnym projekcie)
+Styk F1↔F2 ZROBIONY (ekstrakcja + forward-design + trasy + BOM + kosztorys + audyt + eksport DXF).
+Do pełnej dokumentacji wykonawczej brakuje jeszcze: bloki symboli zamiast prostych kształtów,
+ramka/tabelka rysunkowa wg PN, XREF podkładu architektonicznego, ręczne przesuwanie urządzeń na
+canvas, eksport PDF, oraz DORI (model pokrycia kamer CCTV — F4). Priorytety ustawić po pierwszym
+realnym projekcie klienta.
 
 ## Dalej: F2 LAN+BOM → F3 kosztorys+eksport (PILOT) → F4 CCTV+rack → F5 normy
 Pełna roadmapa: `docs/ROADMAP.md`. Plan każdego kolejnego systemu (trasy, SSWiN, KD, elektryka,
@@ -77,9 +105,11 @@ SAP, DSO, BMS) z typami urządzeń, normami, kalkulatorami i schematami: `docs/S
 - Renderer izolowany (`contextIsolation`, brak `nodeIntegration`) — komunikacja tylko przez `window.infra` (preload).
 - stdout sidecara = TYLKO protokół JSON; diagnostyka na stderr.
 - Przed commitem: `npm run typecheck && npm run lint && npm run test && npm run build`.
+- **NDA:** nigdy nie commituj plików klienta (`*.dxf/*.dwg/*.infra/*.ath`) — pilnuje tego `.gitignore`
+  + pre-commit hook (`.git/hooks/pre-commit`, niewersjonowany — odtwórz po klonie z `docs/SECURITY.md`).
+- Pliki klienta trzymaj poza repo (np. `~/Documents/InfraDesign/`), nie w drzewie projektu.
 
-## Potrzebne od klienta (blokuje jakość F1)
-- **Próbka realnego DXF** firmy-pilota (rzut) — determinuje heurystyki mapowania warstw.
-- Przykładowy **plik kosztorysu ATH** (do reverse-engineeringu eksportu) + którego programu używają (Norma/Zuzia/Rodos).
-- Lista **katalogów/producentów** urządzeń, których używają (do biblioteki `CatalogItem`).
-- Odpowiedzi z **ankiety discovery** (`~/infra-design-presale/` — generator Google Forms).
+## Potrzebne od klienta
+- ✅ Realny DXF (Teatr Rzeszów) — był; teraz drugi projekt **do zaprojektowania od zera**.
+- Przykładowy **plik kosztorysu ATH** (reverse-engineering eksportu) + program (Norma/Zuzia/Rodos).
+- Potwierdzenie **katalogów/producentów** (mamy realne ceny Fibrain/Ubiquiti/Hikvision/ZPAS).
