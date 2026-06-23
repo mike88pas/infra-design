@@ -19,6 +19,17 @@ sidecar/dist/
 .env
 .env.local
 
+# Dane klienta (NDA) — NIGDY do repo. Rzuty/projekty/przedmiary.
+# Wyjątek: fixtury testowe (syntetyczne) w tests/fixtures/.
+*.dwg
+*.dxf
+!tests/fixtures/*.dxf
+*.ath
+*_extracted/
+*PROJEKT_APK*
+przedmiar*
+Downloads/
+
 # Firebase
 .firebase/
 firebase-debug.log

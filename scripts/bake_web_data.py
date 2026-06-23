@@ -86,7 +86,15 @@ def bake_client(server, anonymize=True):
 
     anonymize=True (domyślnie): usuwa dane identyfikujące (nazwa projektu, nazwy
     pomieszczeń, atrybuty IDFX) — artefakt webowy jest publiczny. Zostają liczby:
-    metraże, liczby urządzeń, długości kabli. Desktop używa realnego DXF wprost."""
+    metraże, liczby urządzeń, długości kabli. Desktop używa realnego DXF wprost.
+
+    BEZPIECZEŃSTWO (NDA): artefakt webowy (CLIENT_OUT) jest publiczny, więc anonimizacja
+    jest WYMUSZONA — nie da się upiec realnych danych klienta do web/."""
+    if not anonymize:
+        raise SystemExit(
+            "bake_client: odmowa — web/ jest publiczny i wymaga anonimizacji (NDA). "
+            "Usuń anonymize=False."
+        )
     if not Path(CLIENT_DXF).exists():
         print(f"[client] pominięto — brak pliku {CLIENT_DXF}")
         return
@@ -136,7 +144,13 @@ def bake_client(server, anonymize=True):
         "cableRoutes": cable_routes,
         "cableTotalM": round(sum(c["lengthM"] for c in cable_routes), 1),
     }
-    CLIENT_OUT.write_text(json.dumps(payload, ensure_ascii=False), encoding="utf-8")
+    # Bezpiecznik końcowy (NDA): odmów zapisu, jeśli w payloadzie zostały tokeny klienta.
+    raw = json.dumps(payload, ensure_ascii=False)
+    low = raw.lower()
+    hits = [t for t in ("teatr", "rzesz", "2203-ar") if t in low]
+    if hits or payload["meta"].get("anonymized") is not True:
+        raise SystemExit(f"bake_client: wykryto dane klienta {hits} — przerwano (NDA).")
+    CLIENT_OUT.write_text(raw, encoding="utf-8")
     print(f"Zapisano {CLIENT_OUT}")
     print(f"  warstw={len(layers)} rooms={rooms['count']} inserts={dev['count']} cable_m={payload['cableTotalM']:.0f}")
 
