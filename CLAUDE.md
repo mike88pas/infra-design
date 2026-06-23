@@ -36,6 +36,14 @@ Renderer (React + Generic CAD Core[@core] + plugins) ─IPC(contextBridge)→ Ma
 `npm run dev` · `npm run build` · `npm run typecheck` · `npm run lint` · `npm run test`
 Sidecar: patrz `sidecar/README.md` (venv + `INFRA_PYTHON` by wskazać interpreter).
 
+## Bezpieczeństwo (produkcja desktop-local, dane NDA)
+Aplikacja przetwarza poufne rzuty klientów LOKALNIE (pliki nie opuszczają komputera). Kontrole:
+brama hasła (scrypt) + szyfrowanie projektów `.infra` at-rest (AES-256-GCM, `src/main/crypto/`),
+walidacja ścieżek sidecara (`sidecar/geometry/safepath.py` + `src/main/paths.ts`), walidacja paczki
+(`src/domain/model/validate.ts`), `sandbox:true`/CSP/blokada nawigacji, strażnik repo
+(`.gitignore` + pre-commit). Szczegóły i model zagrożeń: `docs/SECURITY.md`. **Nigdy** nie
+commituj plików klienta (*.dxf/*.dwg/*.infra) ani realnych danych do `web/`.
+
 ## Status
 **F1 DONE** (import DXF + render PixiJS + polygonize + mapowanie warstw + kalibracja).
 **F2 DONE** (instalacje→trasy A*→BOM→kosztorys, `src/domain/installations/`) — w obie strony:
