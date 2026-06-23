@@ -13,7 +13,8 @@ import { SidecarBridge } from '../src/main/sidecar'
 
 const ROOT = join(__dirname, '..')
 const SCRIPT_DIR = join(ROOT, 'sidecar', 'geometry')
-const FIXTURE = join(ROOT, 'tests', 'fixtures', 'sample-floor.dxf')
+const FIXTURE_DIR = join(ROOT, 'tests', 'fixtures')
+const FIXTURE = join(FIXTURE_DIR, 'sample-floor.dxf')
 
 function resolvePython(): string | null {
   const env = process.env.INFRA_PYTHON
@@ -27,7 +28,9 @@ function resolvePython(): string | null {
 
 const python = resolvePython()
 const canRun = python !== null && existsSync(FIXTURE)
-const bridge = canRun ? new SidecarBridge({ scriptDir: SCRIPT_DIR, python: python! }) : null
+const bridge = canRun
+  ? new SidecarBridge({ scriptDir: SCRIPT_DIR, python: python!, allowedRoots: [FIXTURE_DIR] })
+  : null
 
 afterAll(() => bridge?.stop())
 

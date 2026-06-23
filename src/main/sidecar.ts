@@ -12,7 +12,7 @@
 
 import { spawn, type ChildProcessWithoutNullStreams } from 'node:child_process'
 import { existsSync } from 'node:fs'
-import { join } from 'node:path'
+import { join, delimiter } from 'node:path'
 import type {
   DxfDocument,
   ExtractDevicesResult,
@@ -38,6 +38,8 @@ export interface SidecarOptions {
   scriptDir: string
   /** Polecenie Pythona (domyślnie z env INFRA_PYTHON lub 'python'). */
   python?: string
+  /** Bazowe dozwolone korzenie plików (env INFRA_ALLOWED_ROOTS dla safepath). */
+  allowedRoots?: string[]
 }
 
 interface Pending {
@@ -52,10 +54,12 @@ export class SidecarBridge {
   private buffer = ''
   private readonly python: string
   private readonly scriptPath: string
+  private readonly allowedRoots: string[]
 
   constructor(opts: SidecarOptions) {
     this.python = opts.python ?? process.env.INFRA_PYTHON ?? 'python'
     this.scriptPath = join(opts.scriptDir, 'server.py')
+    this.allowedRoots = opts.allowedRoots ?? []
   }
 
   isRunning(): boolean {
@@ -67,8 +71,13 @@ export class SidecarBridge {
     if (!existsSync(this.scriptPath)) {
       throw new Error(`Nie znaleziono sidecara: ${this.scriptPath}`)
     }
+    const env = { ...process.env }
+    if (this.allowedRoots.length) {
+      env.INFRA_ALLOWED_ROOTS = this.allowedRoots.join(delimiter)
+    }
     const proc = spawn(this.python, [this.scriptPath], {
-      stdio: ['pipe', 'pipe', 'pipe']
+      stdio: ['pipe', 'pipe', 'pipe'],
+      env
     })
     this.proc = proc
 
@@ -147,8 +156,8 @@ export class SidecarBridge {
   }
 
   /** Import rzutu DXF → warstwy + encje + bbox (timeout dłuższy: ciężkie pliki). */
-  importDxf(path: string): Promise<DxfDocument> {
-    return this.request('import_dxf', { path }, 120_000)
+  importDxf(path: string, allowedRoots?: string[]): Promise<DxfDocument> {
+    return this.request('import_dxf', { path, _allowedRoots: allowedRoots }, 120_000)
   }
 
   /** Wykrycie pomieszczeń z segmentów ścian (Shapely polygonize). */
@@ -158,6 +167,7 @@ export class SidecarBridge {
     explodeBlocks?: boolean
     snap?: number
     minArea?: number
+    _allowedRoots?: string[]
   }): Promise<PolygonizeResult> {
     return this.request('polygonize', params, 120_000)
   }
@@ -167,6 +177,7 @@ export class SidecarBridge {
     path: string
     layers?: string[]
     includeAttribs?: boolean
+    _allowedRoots?: string[]
   }): Promise<ExtractDevicesResult> {
     return this.request('extract_devices', params, 120_000)
   }
@@ -176,6 +187,7 @@ export class SidecarBridge {
     path: string
     areaLayers?: string[]
     explodeBlocks?: boolean
+    _allowedRoots?: string[]
   }): Promise<ExtractRoomsResult> {
     return this.request('extract_rooms', params, 120_000)
   }
@@ -190,6 +202,7 @@ export class SidecarBridge {
     legend: Array<{ label: string; count: number }>
     meta: Record<string, string>
     symbolSize?: number
+    _allowedRoots?: string[]
   }): Promise<{ path: string; devices: number; routes: number }> {
     return this.request('export_dxf', params, 120_000)
   }
@@ -203,6 +216,7 @@ export class SidecarBridge {
     explodeBlocks?: boolean
     cell?: number
     inflate?: number
+    _allowedRoots?: string[]
   }): Promise<SidecarRouteResult> {
     return this.request('route_cables', params, 180_000)
   }

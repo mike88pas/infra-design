@@ -10,6 +10,7 @@ import { join } from 'node:path'
 import { randomUUID } from 'node:crypto'
 import { SidecarBridge } from './sidecar'
 import { saveProject, loadProject } from './project'
+import { securityRoots, vouchPath, authorizeReadFile, authorizeWriteFile } from './paths'
 import { createEmptyBundle, createEmptyProject, type ProjectBundle } from '@domain/model/schema'
 
 let mainWindow: BrowserWindow | null = null
@@ -21,7 +22,9 @@ function sidecarScriptDir(): string {
 }
 
 function getSidecar(): SidecarBridge {
-  if (!sidecar) sidecar = new SidecarBridge({ scriptDir: sidecarScriptDir() })
+  if (!sidecar) {
+    sidecar = new SidecarBridge({ scriptDir: sidecarScriptDir(), allowedRoots: securityRoots() })
+  }
   return sidecar
 }
 
@@ -110,8 +113,10 @@ function registerIpc(): void {
       })
       if (res.canceled || !res.filePaths.length) return { imported: false }
       target = res.filePaths[0]
+      vouchPath(target) // plik wybrany przez użytkownika → zaufany
     }
-    const doc = await getSidecar().importDxf(target)
+    const roots = authorizeReadFile(target)
+    const doc = await getSidecar().importDxf(target, roots)
     return { imported: true, filePath: target, doc }
   })
 
@@ -122,7 +127,8 @@ function registerIpc(): void {
       _e,
       params: { path: string; wallLayers?: string[]; explodeBlocks?: boolean; snap?: number; minArea?: number }
     ) => {
-      return getSidecar().polygonize(params)
+      const _allowedRoots = authorizeReadFile(params.path)
+      return getSidecar().polygonize({ ...params, _allowedRoots })
     }
   )
 
@@ -130,7 +136,8 @@ function registerIpc(): void {
   ipcMain.handle(
     'dxf:extractDevices',
     async (_e, params: { path: string; layers?: string[]; includeAttribs?: boolean }) => {
-      return getSidecar().extractDevices(params)
+      const _allowedRoots = authorizeReadFile(params.path)
+      return getSidecar().extractDevices({ ...params, _allowedRoots })
     }
   )
 
@@ -138,7 +145,8 @@ function registerIpc(): void {
   ipcMain.handle(
     'dxf:extractRooms',
     async (_e, params: { path: string; areaLayers?: string[]; explodeBlocks?: boolean }) => {
-      return getSidecar().extractRooms(params)
+      const _allowedRoots = authorizeReadFile(params.path)
+      return getSidecar().extractRooms({ ...params, _allowedRoots })
     }
   )
 
@@ -152,7 +160,9 @@ function registerIpc(): void {
         filters: [{ name: 'DXF', extensions: ['dxf'] }]
       })
       if (res.canceled || !res.filePath) return { exported: false }
-      const out = await getSidecar().exportDxf({ ...params, path: res.filePath })
+      vouchPath(res.filePath)
+      const _allowedRoots = authorizeWriteFile(res.filePath)
+      const out = await getSidecar().exportDxf({ ...params, path: res.filePath, _allowedRoots })
       return { exported: true, ...out }
     }
   )
@@ -172,7 +182,8 @@ function registerIpc(): void {
         inflate?: number
       }
     ) => {
-      return getSidecar().routeCables(params)
+      const _allowedRoots = authorizeReadFile(params.path)
+      return getSidecar().routeCables({ ...params, _allowedRoots })
     }
   )
 }

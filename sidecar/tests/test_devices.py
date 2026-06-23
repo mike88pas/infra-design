@@ -140,6 +140,7 @@ def test_export_dxf_writes_readable(tmp_path):
     out = str(tmp_path / "instalacja.dxf")
     res = server._export_dxf({
         "path": out,
+        "_allowedRoots": [str(tmp_path)],
         "devices": [
             {"system": "lan", "typeKey": "lan.outlet.2x", "position": {"x": 1000, "y": 1000}},
             {"system": "lan", "typeKey": "lan.ap", "position": {"x": 3000, "y": 1000}},

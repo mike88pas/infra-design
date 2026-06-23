@@ -18,8 +18,14 @@ Metody:
 """
 
 import json
+import os
 import sys
 import platform
+
+# Katalog tego pliku na sys.path — by `import safepath` działał zarówno przy
+# uruchomieniu jako skrypt (`python server.py`), jak i przy ładowaniu modułu
+# przez importlib w testach (spec_from_file_location nie dodaje katalogu).
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 
 def _ezdxf_version() -> str:
@@ -120,10 +126,9 @@ def _import_dxf(params):
     return: DxfDocument { layers, entities, bbox, units, entityCount, truncated? }
     """
     import ezdxf  # type: ignore
+    import safepath
 
-    path = params.get("path")
-    if not path:
-        raise ValueError("import_dxf: brak parametru 'path'")
+    path = safepath.validate_in_path(params.get("path"), params.get("_allowedRoots"))
 
     doc = ezdxf.readfile(path)
     msp = doc.modelspace()
@@ -330,10 +335,9 @@ def _polygonize(params):
     import ezdxf  # type: ignore
     from shapely.geometry import LineString  # type: ignore
     from shapely.ops import unary_union, polygonize  # type: ignore
+    import safepath
 
-    path = params.get("path")
-    if not path:
-        raise ValueError("polygonize: brak parametru 'path'")
+    path = safepath.validate_in_path(params.get("path"), params.get("_allowedRoots"))
 
     wall_layers = params.get("wallLayers")
     wall_set = set(wall_layers) if wall_layers else None
@@ -442,9 +446,8 @@ def _extract_devices(params):
     """
     import ezdxf  # type: ignore
 
-    path = params.get("path")
-    if not path:
-        raise ValueError("extract_devices: brak parametru 'path'")
+    import safepath
+    path = safepath.validate_in_path(params.get("path"), params.get("_allowedRoots"))
 
     layer_filter = params.get("layers")
     include_attribs = params.get("includeAttribs", True)
@@ -526,9 +529,8 @@ def _extract_rooms(params):
     import ezdxf  # type: ignore
     from shapely.geometry import Polygon, Point as SPoint  # type: ignore
 
-    path = params.get("path")
-    if not path:
-        raise ValueError("extract_rooms: brak parametru 'path'")
+    import safepath
+    path = safepath.validate_in_path(params.get("path"), params.get("_allowedRoots"))
 
     area_layers = params.get("areaLayers") or ["AREA"]
     explode = params.get("explodeBlocks", True)
@@ -662,13 +664,12 @@ def _route_cables(params):
     """
     import ezdxf  # type: ignore
 
-    path = params.get("path")
+    import safepath
     sources = params.get("sources") or []
     targets = params.get("targets") or []
-    if not path:
-        raise ValueError("route_cables: brak parametru 'path'")
     if not sources or not targets:
         return {"routes": [], "cell": 0.0, "grid": {"w": 0, "h": 0}}
+    path = safepath.validate_in_path(params.get("path"), params.get("_allowedRoots"))
 
     wall_layers = params.get("wallLayers")
     wall_set = set(wall_layers) if wall_layers else None
@@ -840,10 +841,9 @@ def _export_dxf(params):
     return: { path, devices, routes }
     """
     import ezdxf  # type: ignore
+    import safepath
 
-    out = params.get("path")
-    if not out:
-        raise ValueError("export_dxf: brak parametru 'path'")
+    out = safepath.validate_out_path(params.get("path"), params.get("_allowedRoots"))
     devices = params.get("devices", [])
     routes = params.get("routes", [])
     rooms = params.get("rooms", [])
