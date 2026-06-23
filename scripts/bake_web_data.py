@@ -120,6 +120,11 @@ def bake_client(server, anonymize=True):
             rm["name"] = "Pomieszczenie"
         for ins in inserts_data:
             ins["attribs"] = {}
+        # Nazwy warstw podkładu zawierają nazwę obiektu (blok architektoniczny,
+        # format "<blok>$0$A-WALL") — zostaw tylko generyczny sufiks warstwy.
+        for l in layers:
+            if "$0$" in l["name"]:
+                l["name"] = "PODKŁAD$0$" + l["name"].rsplit("$0$", 1)[-1]
     else:
         meta_name = "Teatr w Rzeszowie — kondygnacja K+1 (parter)"
 

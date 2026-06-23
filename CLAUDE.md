@@ -37,10 +37,23 @@ Renderer (React + Generic CAD Core[@core] + plugins) ─IPC(contextBridge)→ Ma
 Sidecar: patrz `sidecar/README.md` (venv + `INFRA_PYTHON` by wskazać interpreter).
 
 ## Status
-**F1 DONE** (import DXF + render PixiJS + polygonize + mapowanie warstw + kalibracja). Równolegle
-ruszyło F2 (instalacje→BOM→kosztorys, `src/domain/installations/`). Roadmapa: `docs/ROADMAP.md`.
-Następne: punkt styku F1↔F2 (nanoszenie `Device[]` w wykrytych `Space`, trasowanie).
+**F1 DONE** (import DXF + render PixiJS + polygonize + mapowanie warstw + kalibracja).
+**F2 DONE** (instalacje→trasy A*→BOM→kosztorys, `src/domain/installations/`) — w obie strony:
+- **Ekstrakcja** z realnego rzutu (warstwy `PST_*` → urządzenia → BOM/kosztorys/audyt norm).
+- **Forward-design** („od zera"): `autodesign.ts` z wykazu pomieszczeń generuje LAN+CCTV wg reguł
+  (1 gniazdo/10 m², AP≥30 m², kamera≥40 m²) + szafa IDF; reguły nadpisywalne wytycznymi.
+- **Realny katalog** producentów (FibrainDATA, Ubiquiti, Hikvision, ZPAS) z cenami PL netto.
+- **Walidacja norm** w UI: PN-EN 50173 (kanał LAN ≤90 m). DORI → F4.
+- **Eksport DXF** (`export_dxf`): symbole per system, trasy, legenda — overlay (docelowo XREF).
 
-**Demo dla klienta:** webowy target `web/` (reużywa `@core/cad`) live na
+Kreator importu (`ImportWizard.tsx`) ma tryb **extract / autodesign**. Roadmapa: `docs/ROADMAP.md`.
+Następne (pełne Rysunki PW): bloki symboli, ramka/tabelka PN, XREF podkładu, ręczne przesuwanie
+urządzeń na canvas, eksport PDF, DORI (model pokrycia kamer, F4).
+
+**Demo dla klienta:** webowy target `web/` (reużywa `@core/cad`) na
 **https://infra-design-app.web.app** (Firebase Hosting, projekt `infra-design-app`). Pipeline:
 `npm run web:bake && npm run web:build && firebase deploy --only hosting`. Szczegóły: `docs/WEB_DEMO.md`.
+Sekcja „Realny projekt" liczy pipeline LIVE w przeglądarce na **zanonimizowanym** rzucie
+(`bake_client(anonymize=True)` — nazwy pomieszczeń/warstw/atrybuty wyczyszczone; 0 danych klienta).
+**Web = landing + demo (ekstrakcja+BOM+kosztorys+normy); pełny tryb projektowania od zera
+i eksport DXF są w aplikacji desktop (Electron), nie na stronie.**
