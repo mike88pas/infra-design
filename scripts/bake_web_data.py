@@ -156,6 +156,20 @@ def bake_client(server, anonymize=True):
 
 
 if __name__ == "__main__":
+    # Walidacja ścieżek sidecara (safepath) wymaga dozwolonych korzeni. Skrypt bake woła
+    # handlery in-process (z zaufanymi, lokalnymi plikami), więc ustawiamy korzenie: repo
+    # (fixture) + katalog DXF klienta. Nie osłabia to ochrony w aplikacji (tam roots z IPC).
+    _roots = [str(ROOT), str(Path(CLIENT_DXF).parent)]
+    if os.environ.get("INFRA_ALLOWED_ROOTS"):
+        _roots.append(os.environ["INFRA_ALLOWED_ROOTS"])
+    os.environ["INFRA_ALLOWED_ROOTS"] = os.pathsep.join(_roots)
+
     server = load_server()
     main()
-    bake_client(server)
+    # Re-bake realnego rzutu klienta TYLKO na żądanie (INFRA_BAKE_CLIENT=1). Domyślnie deploy
+    # używa już zacommitowanego, zanonimizowanego client-floor.json (po scrubie historii) i NIE
+    # dotyka DXF-a klienta — bezpieczniej dla NDA i nie wymaga pliku spoza repo.
+    if os.environ.get("INFRA_BAKE_CLIENT"):
+        bake_client(server)
+    else:
+        print("[client] re-bake pominiety (ustaw INFRA_BAKE_CLIENT=1, aby odswiezyc client-floor.json)")
