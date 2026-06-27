@@ -8,11 +8,13 @@
 
 import { useEffect, useRef } from 'react'
 import type { DxfDocument } from '@domain/model/schema'
-import { CadScene, type RenderSpace } from './'
+import { CadScene, type RenderSpace, type RenderDevice, type RenderRoute } from './'
 
 export interface CadViewerProps {
   doc: DxfDocument | null
   spaces: RenderSpace[]
+  devices?: RenderDevice[]
+  routes?: RenderRoute[]
   layerVisibility?: Record<string, boolean>
   onHoverSpace?: (s: RenderSpace | null) => void
   onReady?: (scene: CadScene) => void
@@ -22,6 +24,8 @@ export interface CadViewerProps {
 export function CadViewer({
   doc,
   spaces,
+  devices,
+  routes,
   layerVisibility,
   onHoverSpace,
   onReady,
@@ -31,8 +35,8 @@ export function CadViewer({
   const sceneRef = useRef<CadScene | null>(null)
   const readyRef = useRef(false)
   // Najświeższe dane/callbacki bez retriggerowania montażu sceny.
-  const latest = useRef({ doc, spaces, layerVisibility, onHoverSpace, onReady })
-  latest.current = { doc, spaces, layerVisibility, onHoverSpace, onReady }
+  const latest = useRef({ doc, spaces, devices, routes, layerVisibility, onHoverSpace, onReady })
+  latest.current = { doc, spaces, devices, routes, layerVisibility, onHoverSpace, onReady }
 
   // Po każdym load trzeba na nowo nałożyć widoczność warstw (load tworzy je od zera).
   function applyVisibility(): void {
@@ -55,7 +59,7 @@ export function CadViewer({
       readyRef.current = true
       latest.current.onReady?.(scene)
       if (latest.current.doc) {
-        scene.load(latest.current.doc, latest.current.spaces)
+        scene.load(latest.current.doc, latest.current.spaces, latest.current.devices, latest.current.routes)
         applyVisibility()
       }
     })
@@ -70,10 +74,10 @@ export function CadViewer({
   // Przeładowanie danych (po load ponownie nakładamy widoczność warstw).
   useEffect(() => {
     if (readyRef.current && sceneRef.current && doc) {
-      sceneRef.current.load(doc, spaces)
+      sceneRef.current.load(doc, spaces, devices, routes)
       applyVisibility()
     }
-  }, [doc, spaces])
+  }, [doc, spaces, devices, routes])
 
   // Synchronizacja widoczności warstw.
   useEffect(() => {

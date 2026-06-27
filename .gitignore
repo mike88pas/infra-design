@@ -36,3 +36,8 @@ firebase-debug.log
 
 # Artefakty weryfikacji (screenshoty headless)
 scripts/_demo-screenshot.png
+/dist/
+/build/
+/resources/sidecar/
+/resources/icon.png
+/resources/icon.ico

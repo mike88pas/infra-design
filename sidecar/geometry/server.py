@@ -46,10 +46,50 @@ def handler(name):
     return deco
 
 
+# ── cache parsowania DXF ─────────────────────────────────────────────────────
+#
+# Plik 40 MB parsuje się ~10 s. Kreator woła kilka handlerów na tym samym pliku
+# w jednym imporcie — bez cache każdy płaci pełny koszt. Trzymamy DOKŁADNIE JEDEN
+# zparsowany dokument w pamięci (maszyna ma napięty RAM — nigdy 2 doce naraz).
+# Klucz: (abspath, mtime_ns, size) — invaliduje się sam, gdy plik się zmieni.
+# Wszystkie handlery są READ-ONLY, więc współdzielenie doc między wywołaniami jest bezpieczne.
+
+_DOC_CACHE_KEY = None
+_DOC_CACHE = None
+
+
+def _load_doc(path):
+    """Zwraca zcache'owany ezdxf `Drawing` dla `path` albo parsuje od nowa.
+
+    `path` powinno być już zwalidowane (safepath.validate_in_path). Cache keyujemy
+    po (os.path.abspath, mtime_ns, size). Przed wczytaniem nowego doca zwalniamy
+    poprzedni (None), by nie trzymać dwóch naraz.
+    """
+    import ezdxf  # type: ignore
+
+    global _DOC_CACHE_KEY, _DOC_CACHE
+    abspath = os.path.abspath(path)
+    st = os.stat(abspath)
+    key = (abspath, st.st_mtime_ns, st.st_size)
+    if key == _DOC_CACHE_KEY and _DOC_CACHE is not None:
+        return _DOC_CACHE
+    # Zwolnij poprzedni dokument PRZED wczytaniem nowego (napięty RAM — bez 2 doców naraz).
+    _DOC_CACHE = None
+    _DOC_CACHE_KEY = None
+    doc = ezdxf.readfile(path)
+    _DOC_CACHE = doc
+    _DOC_CACHE_KEY = key
+    return doc
+
+
 # ── Pomocnicze ──────────────────────────────────────────────────────────────
 
 # Ochrona pamięci: twardy limit encji renderowalnych z jednego DXF.
 MAX_ENTITIES = 300_000
+
+# Górny limit segmentów dla polygonize. Powyżej tej liczby Shapely (unary_union +
+# polygonize) na maszynie z napiętym RAM potrafi paść — bail z czytelnym błędem.
+POLYGONIZE_MAX_SEGMENTS = 20_000
 
 # $INSUNITS → jednostka modelu. Schema TS zna tylko mm|m; cm/in mapujemy na mm.
 _INSUNITS_M = {6: "m"}  # 6 = metry; reszta traktowana jak mm
@@ -129,8 +169,13 @@ def _import_dxf(params):
     import safepath
 
     path = safepath.validate_in_path(params.get("path"), params.get("_allowedRoots"))
+    # Limit encji do RENDEROWANIA. Podkłady zwektoryzowane z PDF mają dziesiątki tysięcy
+    # mikro-encji — pełny zrzut zatyka IPC i renderer. Caller (kreator) może podać niski
+    # limit (podkład jest tylko poglądowy; projekt liczy się z wykazu pomieszczeń).
+    max_render = int(params.get("maxRenderEntities", MAX_ENTITIES) or MAX_ENTITIES)
+    max_render = max(1, min(max_render, MAX_ENTITIES))
 
-    doc = ezdxf.readfile(path)
+    doc = _load_doc(path)
     msp = doc.modelspace()
 
     units = _INSUNITS_M.get(int(doc.header.get("$INSUNITS", 0) or 0), "mm")
@@ -155,7 +200,7 @@ def _import_dxf(params):
 
     def cap() -> bool:
         nonlocal truncated
-        if len(entities) >= MAX_ENTITIES:
+        if len(entities) >= max_render:
             truncated += 1
             return True
         return False
@@ -307,12 +352,18 @@ _MTEXT_UNICODE_RE = None
 
 
 def _decode_mtext(text: str) -> str:
-    """Dekoduje escapy '\\U+XXXX' (polskie znaki w MTEXT, np. ł=U+0142) i czyści białe znaki."""
+    """Dekoduje escapy '\\U+XXXX' (polskie znaki w MTEXT, np. ł=U+0142) i czyści białe znaki.
+
+    Standard AutoCAD = 4 cyfry hex ('\\U+0142'). Niektóre konwertery (DWG zwektoryzowany
+    z PDF) gubią wiodące zera i zapisują 3 hex ('\\U+142'). Próbujemy 4-hex, potem 3-hex.
+    """
     import re
     global _MTEXT_UNICODE_RE
     if _MTEXT_UNICODE_RE is None:
-        _MTEXT_UNICODE_RE = re.compile(r"\\U\+([0-9A-Fa-f]{4})")
-    return _MTEXT_UNICODE_RE.sub(lambda m: chr(int(m.group(1), 16)), text).strip()
+        _MTEXT_UNICODE_RE = re.compile(r"\\U\+([0-9A-Fa-f]{4})|\\U\+([0-9A-Fa-f]{3})")
+    return _MTEXT_UNICODE_RE.sub(
+        lambda m: chr(int(m.group(1) or m.group(2), 16)), text
+    ).strip()
 
 
 # ── polygonize ──────────────────────────────────────────────────────────────
@@ -343,7 +394,7 @@ def _polygonize(params):
     wall_set = set(wall_layers) if wall_layers else None
     explode = bool(params.get("explodeBlocks", False))
 
-    doc = ezdxf.readfile(path)
+    doc = _load_doc(path)
     msp = doc.modelspace()
 
     # Zbierz segmenty + oszacuj rozmiar rysunku (do auto-snapu)
@@ -372,11 +423,25 @@ def _polygonize(params):
                 bbox.add(x, y)
 
     for e in msp:
-        if len(segments) >= MAX_ENTITIES:
+        if len(segments) > POLYGONIZE_MAX_SEGMENTS:
             break
         for geom in _iter_wall_geometry(e, explode):
             if _layer_matches(getattr(geom.dxf, "layer", "0"), wall_set):
                 emit(geom)
+
+    # Ochrona: polygonize na dziesiątkach tysięcy segmentów (np. podkład zwektoryzowany
+    # z PDF, bez warstwy ścian) potrafi zżreć pamięć i ubić sidecar. Bezpieczny bail z
+    # czytelną wskazówką, zamiast OOM/zawisu — szczególnie na maszynach z napiętym RAM.
+    if len(segments) > POLYGONIZE_MAX_SEGMENTS:
+        return {
+            "polygons": [],
+            "snapTolerance": 0.0,
+            "error": (
+                f"Za zlozona geometria ({len(segments)}+ segmentow) — to wyglada na podklad "
+                "wektoryzowany z PDF lub brak wskazanej warstwy scian. Zawez 'warstwy scian' "
+                "albo uzyj trybu 'Tabela Zestawienie' zamiast 'ze scian'."
+            ),
+        }
 
     if not segments:
         return {"polygons": [], "snapTolerance": 0.0}
@@ -452,7 +517,7 @@ def _extract_devices(params):
     layer_filter = params.get("layers")
     include_attribs = params.get("includeAttribs", True)
 
-    doc = ezdxf.readfile(path)
+    doc = _load_doc(path)
     msp = doc.modelspace()
 
     inserts = []
@@ -535,7 +600,7 @@ def _extract_rooms(params):
     area_layers = params.get("areaLayers") or ["AREA"]
     explode = params.get("explodeBlocks", True)
 
-    doc = ezdxf.readfile(path)
+    doc = _load_doc(path)
     msp = doc.modelspace()
 
     def on_area(layer: str) -> bool:
@@ -595,6 +660,157 @@ def _extract_rooms(params):
 
     rooms.sort(key=lambda r: (r["areaM2"] or 0), reverse=True)
     return {"rooms": rooms, "count": len(rooms)}
+
+
+# ── extract_rooms_schedule ────────────────────────────────────────────────────
+#
+# Dla rzutów bez warstw pól (np. DWG zwektoryzowany z PDF): wykaz pomieszczeń jest
+# w TABELI "Zestawienie" (kolumny: numer | nazwa | powierzchnia m²), a na rzucie są
+# tylko ETYKIETY-NUMERY (0.14, 1.07…) na środku pomieszczeń. Łączymy oba po numerze:
+#   tabela  → number → (name, areaM2)
+#   rzut    → number → pozycja (at)
+# Separacja: numery pomieszczeń mają KROPKĘ (0.14), powierzchnie PRZECINEK (65,99).
+
+_SCHED_NUM_RE = None
+_SCHED_AREA_RE = None
+
+
+def _collect_texts(msp, explode=True):
+    """Zbiera (text, x, y) z TEXT i MTEXT (z rozbiciem bloków)."""
+    out = []
+    for e in msp:
+        for g in _iter_exploded(e, explode):
+            t = g.dxftype()
+            if t not in ("TEXT", "MTEXT"):
+                continue
+            try:
+                raw = g.plain_text() if t == "MTEXT" else g.dxf.text
+                txt = _decode_mtext(raw).strip()
+                if not txt:
+                    continue
+                p = g.dxf.insert
+                out.append((txt, float(p.x), float(p.y)))
+            except Exception:  # noqa: BLE001
+                pass
+    return out
+
+
+@handler("extract_rooms_schedule")
+def _extract_rooms_schedule(params):
+    """
+    Wykaz pomieszczeń z TABELI zestawienia + etykiet-numerów na rzucie.
+
+    params: {
+        "path": str,
+        "explodeBlocks": bool?,   # domyślnie True
+        "scale": float?,          # mnożnik pozycji (np. 0.1 dla 1:100 mm→m); domyślnie 1.0
+        "headerName": str?,       # tekst nagłówka kolumny nazwy (domyślnie 'Pomieszczenie')
+        "headerArea": str?        # tekst nagłówka kolumny pola (domyślnie 'Powierzchnia')
+    }
+    return: { rooms:[{number,name,areaM2,at,tag}], count, table_rows, plan_labels, unmatched }
+    """
+    import re
+    import ezdxf  # type: ignore
+
+    global _SCHED_NUM_RE, _SCHED_AREA_RE
+    if _SCHED_NUM_RE is None:
+        _SCHED_NUM_RE = re.compile(r"^\d+\.\w{1,3}$")          # 0.14, 1.07, 3.2A
+        _SCHED_AREA_RE = re.compile(r"^([\d ]+,\d+)\s*(?:m[²2]?)?$")  # 65,99 / 1 203,11
+
+    import safepath
+    path = safepath.validate_in_path(params.get("path"), params.get("_allowedRoots"))
+    explode = params.get("explodeBlocks", True)
+    scale = float(params.get("scale", 1.0))
+    hdr_name = params.get("headerName", "Pomieszczenie")
+    hdr_area = params.get("headerArea", "Powierzchnia")
+
+    doc = _load_doc(path)
+    texts = _collect_texts(doc.modelspace(), explode)
+
+    # 1) Nagłówki tabeli → x kolumn + y nagłówka.
+    name_x = area_x = header_y = None
+    for txt, x, y in texts:
+        if txt == hdr_name:
+            name_x, header_y = x, y
+        elif txt == hdr_area:
+            area_x = x
+    if name_x is None or area_x is None:
+        return {"rooms": [], "count": 0, "error": "Nie znaleziono nagłówków tabeli zestawienia"}
+
+    # Granica tabela / rzut: numery tabeli są tuż przy/na lewo od kolumny nazwy.
+    table_left = name_x - 60.0   # numery rzutu mają x < table_left
+
+    # 2) Wiersze tabeli (y <= header_y): grupuj po Y (tolerancja 2.5).
+    in_table = [(t, x, y) for (t, x, y) in texts if y <= header_y + 1.0 and x >= table_left]
+    in_table.sort(key=lambda r: -r[2])
+    rows = []  # list[dict(y, number, name, area)]
+    for t, x, y in in_table:
+        row = None
+        for r in rows:
+            if abs(r["y"] - y) <= 2.5:
+                row = r
+                break
+        if row is None:
+            row = {"y": y, "number": "", "name": "", "area": None}
+            rows.append(row)
+        if _SCHED_NUM_RE.match(t) and x < name_x - 8:
+            row["number"] = t
+        elif _SCHED_AREA_RE.match(t):
+            am = _SCHED_AREA_RE.match(t)
+            try:
+                row["area"] = float(am.group(1).replace(" ", "").replace(",", "."))
+            except ValueError:
+                pass
+        elif x < area_x - 15 and not _SCHED_NUM_RE.match(t):
+            row["name"] = (row["name"] + " " + t).strip()
+
+    sched = {}  # number → (name, area)
+    for r in rows:
+        if r["number"]:
+            sched[r["number"]] = (r["name"], r["area"])
+
+    # 3) Etykiety-numery na rzucie (x < table_left) → pozycja (uśredniona przy duplikatach).
+    plan = {}
+    for t, x, y in texts:
+        if x < table_left and _SCHED_NUM_RE.match(t):
+            plan.setdefault(t, []).append((x, y))
+    plan_pos = {n: (sum(p[0] for p in pts) / len(pts), sum(p[1] for p in pts) / len(pts))
+                for n, pts in plan.items()}
+
+    # 4) Join po numerze. Pozycje skalowane (scale). Brak pozycji → siatka zastępcza.
+    rooms = []
+    unmatched = []
+    keys = sorted(set(sched) | set(plan_pos), key=lambda k: (len(k), k))
+    gx = gy = 0.0
+    for i, num in enumerate(keys):
+        name, area = sched.get(num, ("", None))
+        if num in plan_pos:
+            px, py = plan_pos[num]
+            at = {"x": px * scale, "y": py * scale}
+        else:
+            at = {"x": (gx := gx + 5.0), "y": gy}   # zastępcza siatka (brak etykiety na rzucie)
+            unmatched.append(num)
+        s = 0.5
+        rooms.append({
+            "number": num,
+            "name": name,
+            "areaM2": area,
+            "at": at,
+            "tag": [
+                {"x": at["x"] - s, "y": at["y"] - s},
+                {"x": at["x"] + s, "y": at["y"] - s},
+                {"x": at["x"] + s, "y": at["y"] + s},
+                {"x": at["x"] - s, "y": at["y"] + s},
+            ],
+        })
+    rooms.sort(key=lambda r: (r["areaM2"] or 0), reverse=True)
+    return {
+        "rooms": rooms,
+        "count": len(rooms),
+        "table_rows": len(sched),
+        "plan_labels": len(plan_pos),
+        "unmatched": unmatched,
+    }
 
 
 # ── route_cables (A*) ─────────────────────────────────────────────────────────
@@ -676,7 +892,7 @@ def _route_cables(params):
     explode = params.get("explodeBlocks", True)
     inflate = int(params.get("inflate", 0))
 
-    doc = ezdxf.readfile(path)
+    doc = _load_doc(path)
     msp = doc.modelspace()
 
     # Segmenty ścian + bbox całości (źródła, cele, ściany)
@@ -920,6 +1136,180 @@ def _export_dxf(params):
     return {"path": out, "devices": len(devices), "routes": len(routes)}
 
 
+@handler("export_kosztorys")
+def _export_kosztorys(params):
+    """
+    Zapisuje kosztorys/zestawienie inwestorskie do XLSX w formacie klienta.
+
+    params: {
+        "path": str,                          # plik wyjściowy .xlsx
+        "kosztorys": {                        # struktura z buildKosztorys (TS)
+            "categories": [{label, kosztorys:[...], zestawienie:[...], netto, brutto}],
+            "all": [{lp,sku,name,unit,qty,price,netto,brutto}],
+            "total": {netto, brutto},
+            "vatPct": int,
+            "meta": {project, generatedNote}
+        }
+    }
+    Arkusze: KOSZTORYS CAŁOŚĆ + ZESTAWIENIE CAŁOŚĆ, potem para Kosztorys/Zestawienie per kategoria.
+    return: { path, sheets, rows }
+    """
+    import openpyxl  # type: ignore
+    from openpyxl.styles import Font  # type: ignore
+    import safepath
+
+    out = safepath.validate_out_path(params.get("path"), params.get("_allowedRoots"), allowed_ext=(".xlsx",))
+    k = params.get("kosztorys", {}) or {}
+    categories = k.get("categories", [])
+    all_rows = k.get("all", [])
+    total = k.get("total", {}) or {}
+    meta = k.get("meta", {}) or {}
+
+    KH = ["Lp.", "Towar", "Ilość", "Cena", "Waluta", "Netto", "Brutto", "Nazwa"]
+    ZH = ["Lp.", "Towar", "Ilość", "J.M", "Nazwa"]
+    bold = Font(bold=True)
+
+    wb = openpyxl.Workbook()
+    wb.remove(wb.active)
+
+    def kosztorys_sheet(title, rows):
+        ws = wb.create_sheet(title[:31])
+        ws.append(["Pozycje oferty"])
+        ws["A1"].font = bold
+        ws.append(KH)
+        for c in ws[2]:
+            c.font = bold
+        for r in rows:
+            ws.append([
+                r.get("lp"), r.get("sku"), r.get("qty"), r.get("price"), "PLN",
+                r.get("netto"), r.get("brutto"), r.get("name"),
+            ])
+        return ws
+
+    def zestawienie_sheet(title, rows):
+        ws = wb.create_sheet(title[:31])
+        ws.append(ZH)
+        for c in ws[1]:
+            c.font = bold
+        for r in rows:
+            ws.append([r.get("lp"), r.get("sku"), r.get("qty"), r.get("unit"), r.get("name")])
+        return ws
+
+    # CAŁOŚĆ — wszystkie pozycje (Lp ciągłe)
+    wsc = kosztorys_sheet("KOSZTORYS CAŁOŚĆ", all_rows)
+    wsc.append([])
+    wsc.append(["", "RAZEM", "", "", "PLN", total.get("netto"), total.get("brutto"), "Suma"])
+    for c in wsc[wsc.max_row]:
+        c.font = bold
+    z_all = [
+        {"lp": i + 1, "sku": r.get("sku"), "qty": r.get("qty"), "unit": r.get("unit"), "name": r.get("name")}
+        for i, r in enumerate(all_rows)
+    ]
+    zestawienie_sheet("ZESTAWIENIE CAŁOŚĆ", z_all)
+
+    # Para arkuszy per kategoria
+    for cat in categories:
+        label = cat.get("label", "?")
+        kosztorys_sheet(f"Kosztorys {label}", cat.get("kosztorys", []))
+        zestawienie_sheet(f"Zestawienie {label}", cat.get("zestawienie", []))
+
+    # auto-szerokości (zgrubnie)
+    for ws in wb.worksheets:
+        for col in ws.columns:
+            width = max((len(str(c.value)) for c in col if c.value is not None), default=8)
+            ws.column_dimensions[col[0].column_letter].width = min(max(width + 2, 8), 60)
+
+    wb.save(out)
+    return {"path": out, "sheets": len(wb.worksheets), "rows": len(all_rows)}
+
+
+@handler("export_rack_elevation")
+def _export_rack_elevation(params):
+    """
+    Rysuje elewację (widok od frontu) szaf 19" do DXF — na wzór „Widok/Elewacja szaf".
+
+    params: {
+        "path": str,                           # plik wyjściowy .dxf
+        "racks": [{name, uHeight, units:[{uPos,uSize,label}]}],
+        "meta": {project, designer, license}
+    }
+    return: { path, racks, units }
+    """
+    import ezdxf  # type: ignore
+    import safepath
+
+    out = safepath.validate_out_path(params.get("path"), params.get("_allowedRoots"))
+    racks = params.get("racks", [])
+    meta = params.get("meta", {})
+
+    U = 44.45            # wysokość 1U [mm]
+    INNER = 482.6        # szerokość montażowa 19" [mm]
+    FRAME_W = 600.0      # szerokość obrysu szafy
+    GAP = 400.0          # odstęp między szafami
+    MARGIN = (FRAME_W - INNER) / 2
+
+    doc = ezdxf.new("R2018", setup=True)
+    doc.header["$INSUNITS"] = 4  # mm
+    msp = doc.modelspace()
+    for name, color in (("RACK-FRAME", 7), ("RACK-UNIT", 5), ("RACK-TEXT", 3), ("RACK-EMPTY", 8)):
+        if name not in doc.layers:
+            doc.layers.add(name, color=color)
+
+    def rect(x0, y0, x1, y1, layer):
+        msp.add_lwpolyline([(x0, y0), (x1, y0), (x1, y1), (x0, y1)], close=True, dxfattribs={"layer": layer})
+
+    total_units = 0
+    x = 0.0
+    for rack in racks:
+        uH = int(rack.get("uHeight", 42))
+        H = uH * U
+        # Obrys szafy + szyny montażowe
+        rect(x, 0, x + FRAME_W, H, "RACK-FRAME")
+        rect(x + MARGIN, 0, x + MARGIN + INNER, H, "RACK-FRAME")
+        # Nazwa szafy
+        msp.add_text(rack.get("name", "Szafa"), height=U * 0.6,
+                     dxfattribs={"layer": "RACK-TEXT"}).set_placement((x, H + U * 0.6))
+        # Numeracja U (co 1U, od dołu) + pozioma kreska siatki
+        for u in range(uH):
+            y = u * U
+            msp.add_text(str(uH - u), height=U * 0.35,
+                         dxfattribs={"layer": "RACK-TEXT"}).set_placement((x - U * 0.9, y + U * 0.3))
+        # Zajęte U
+        occupied = set()
+        for unit in rack.get("units", []):
+            up = int(unit.get("uPos", 1))
+            us = int(unit.get("uSize", 1))
+            # rysujemy od dołu: uPos=1 na dole
+            y0 = (up - 1) * U
+            y1 = y0 + us * U
+            rect(x + MARGIN, y0, x + MARGIN + INNER, y1, "RACK-UNIT")
+            msp.add_text(unit.get("label", ""), height=U * 0.4,
+                         dxfattribs={"layer": "RACK-TEXT"}).set_placement((x + MARGIN + U * 0.4, y0 + us * U * 0.3))
+            for k in range(us):
+                occupied.add(up + k)
+            total_units += 1
+        # Puste U (szrafowanie cienką linią)
+        for u in range(1, uH + 1):
+            if u not in occupied:
+                y0 = (u - 1) * U
+                rect(x + MARGIN, y0, x + MARGIN + INNER, y0 + U, "RACK-EMPTY")
+        x += FRAME_W + GAP
+
+    # Tabelka projektu
+    if racks:
+        ty = -U * 2
+        for line in [
+            f"Projekt: {meta.get('project', '')}",
+            f"Projektant: {meta.get('designer', '')}  upr. {meta.get('license', '')}",
+            "Elewacja szaf — rysunek wspomaga projektanta, nie zastępuje autoryzacji projektu.",
+        ]:
+            msp.add_text(line, height=U * 0.45, dxfattribs={"layer": "RACK-TEXT"}).set_placement((0, ty))
+            ty -= U
+
+    doc.saveas(out)
+    return {"path": out, "racks": len(racks), "units": total_units}
+
+
 # ── pętla protokołu ─────────────────────────────────────────────────────────
 
 def dispatch(method: str, params: dict):
@@ -929,18 +1319,52 @@ def dispatch(method: str, params: dict):
     return fn(params or {})
 
 
+def _result_size(method: str, result) -> str:
+    """Krótki opis rozmiaru wyniku do logu czasowego (debug)."""
+    if not isinstance(result, dict):
+        return ""
+    for k in ("entities", "routes", "rooms", "polygons", "inserts"):
+        v = result.get(k)
+        if isinstance(v, list):
+            extra = f" truncated={result['truncated']}" if result.get("truncated") else ""
+            return f" {k}={len(v)}{extra}"
+    return ""
+
+
 def main() -> int:
+    import time
+    # Protokół JSON jest UTF-8 — na Windows domyślne kodowanie stdio to cp125x, co
+    # rozsypuje polskie znaki w danych z requestu (np. nazwy „MODUŁ"). Wymuszamy UTF-8.
+    for stream in (sys.stdin, sys.stdout):
+        try:
+            stream.reconfigure(encoding="utf-8", errors="replace")  # type: ignore[attr-defined]
+        except Exception:  # noqa: BLE001
+            pass
+    debug = bool(os.environ.get("INFRA_DEBUG"))
     print("infra-design sidecar gotowy", file=sys.stderr, flush=True)
     for line in sys.stdin:
         line = line.strip()
         if not line:
             continue
+        method = "?"
+        t0 = time.perf_counter()
         try:
             msg = json.loads(line)
             msg_id = msg.get("id")
-            result = dispatch(msg.get("method", ""), msg.get("params"))
+            method = msg.get("method", "")
+            if debug:
+                print(f"[timing] -> {method} start", file=sys.stderr, flush=True)
+            result = dispatch(method, msg.get("params"))
             out = {"id": msg_id, "ok": True, "result": result}
+            if debug:
+                dt = (time.perf_counter() - t0) * 1000
+                print(f"[timing] <- {method} OK {dt:.0f}ms{_result_size(method, result)}",
+                      file=sys.stderr, flush=True)
         except Exception as exc:  # noqa: BLE001
+            if debug:
+                dt = (time.perf_counter() - t0) * 1000
+                print(f"[timing] <- {method} ERROR {dt:.0f}ms: {exc.__class__.__name__}: {exc}",
+                      file=sys.stderr, flush=True)
             out = {
                 "id": locals().get("msg_id"),
                 "ok": False,

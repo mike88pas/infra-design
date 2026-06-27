@@ -1,0 +1,40 @@
+<svg width="512" height="512" viewBox="0 0 512 512" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#0e1830"/>
+      <stop offset="1" stop-color="#0b1220"/>
+    </linearGradient>
+    <linearGradient id="teal" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#5eead4"/>
+      <stop offset="1" stop-color="#2dd4bf"/>
+    </linearGradient>
+    <filter id="glow" x="-40%" y="-40%" width="180%" height="180%">
+      <feGaussianBlur stdDeviation="6" result="b"/>
+      <feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+  </defs>
+
+  <!-- kafel -->
+  <rect x="24" y="24" width="464" height="464" rx="96" fill="url(#bg)" stroke="#2dd4bf" stroke-opacity="0.35" stroke-width="4"/>
+
+  <!-- siatka rzutu (blueprint) -->
+  <g stroke="#2dd4bf" stroke-opacity="0.12" stroke-width="3">
+    <path d="M120 64 V448 M256 64 V448 M392 64 V448"/>
+    <path d="M64 152 H448 M64 296 H448"/>
+  </g>
+
+  <!-- obrys pomieszczenia (L) -->
+  <path d="M120 360 V200 H300 V152" fill="none" stroke="#94a3b8" stroke-opacity="0.45"
+        stroke-width="10" stroke-linecap="round" stroke-linejoin="round"/>
+
+  <!-- trasy instalacji (kable) -->
+  <path d="M152 360 H296 V232 H392" fill="none" stroke="url(#teal)" stroke-width="14"
+        stroke-linecap="round" stroke-linejoin="round"/>
+
+  <!-- węzły / urządzenia -->
+  <g fill="url(#teal)">
+    <rect x="138" y="346" width="28" height="28" rx="6"/>           <!-- gniazdo (kwadrat) -->
+    <circle cx="296" cy="232" r="18" filter="url(#glow)"/>          <!-- AP/węzeł (koło, świeci) -->
+    <path d="M392 214 l18 36 h-36 z"/>                              <!-- kamera (trójkąt) -->
+  </g>
+</svg>

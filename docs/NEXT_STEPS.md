@@ -21,6 +21,53 @@ Ten plik = punkt startu dla osoby/instancji przejmującej projekt. Czytaj w kole
   (Firebase Hosting `infra-design-app`). Szczegóły: `docs/WEB_DEMO.md`.
 - Pilot MVP = **LAN + CCTV**. Zasada twarda: software **wspomaga projektanta** (nie podpisuje).
 
+## Release desktop — branding, render 2D, instalator (faza „dopieszczania")
+- **Render 2D instalacji na rzucie**: po autodesign na canvasie widać urządzenia (symbole:
+  gniazdo=kwadrat, AP=koło, kamera=trójkąt), trasy kabli i legendę. Typy `RenderDevice`/`RenderRoute`
+  w `src/core/cad/CadScene.ts`; `CadViewer` ma propsy `devices`/`routes`; `App.tsx` mapuje z bundla.
+- **Cache parsowania DXF** w sidecarze (`_load_doc`, `server.py`): 1 dokument keyowany
+  `(path,mtime,size)` → kreator parsuje 40 MB raz, nie przy każdym handlerze (10 s → ~0,2 s).
+- **Branding**: logo inline `src/renderer/src/components/Logo.tsx` (+ `resources/icon.svg`), modal
+  „O programie" `components/About.tsx`, nagłówek/stopka „The Best Agency". Ikona: `npm run icons`
+  (sharp+png-to-ico z `resources/icon.svg` → `resources/icon.png`+`icon.ico`).
+- **Sidecar jako exe** (klient bez Pythona): `npm run sidecar:build` (PyInstaller → `resources/
+  sidecar/server.exe`). W produkcji `getSidecar()` (main) uruchamia ten exe (tryb `exePath` w
+  `SidecarBridge`); w dev nadal Python + `server.py`.
+- **Instalator**: `npm run dist` (electron-vite build + electron-builder NSIS, `electron-builder.yml`)
+  → `dist/Infra Design Setup <wersja>.exe`. ⚠️ Najpierw `npm run icons` i `npm run sidecar:build`.
+  Instalator niesygnowany → SmartScreen ostrzega (Więcej info → Uruchom). Skrót na pulpicie/Start.
+  **Uwaga środowiska**: jeśli `ELECTRON_RUN_AS_NODE=1` jest ustawione w sesji, Electron startuje jako
+  Node i pada — dev/preview odpalać z `unset ELECTRON_RUN_AS_NODE` (u klienta zmienna nie istnieje).
+- **Debug**: instrumentacja (timing sidecara, konsola renderera, DevTools) za flagą `INFRA_DEBUG=1`.
+
+## Kosztorys inwestorski (XLSX) + elewacja szaf (faza „działająca wersja")
+Na bazie realnych projektów SOS klienta (HOTEL/TEATR/ZAKŁAD — kosztorysy Fibrain/Alcatel,
+rysunki „Widok szaf"). Pliki referencyjne **poza repo**: `~/Documents/InfraDesign/_reference/`
+(NDA — w repo tylko generyczny katalog: SKU+nazwa+cena+kategoria).
+- **Realny katalog** (`src/domain/installations/catalog.ts`): `CatalogEntry` ma `category`
+  (`pasywne|aktywne|telefony`), `uSize` (pozycje rackowe) i `components` — rozkład „logicznej"
+  pozycji na realne SKU (gniazdo → `GIP-2`+`SUP-2`+`RAM-2`+2×`XR200`+`XB-45KA45D-02`; panel →
+  `XPS00`+`XMS00`+24×`XR200`; szafa → `SRS-42`+`CKS`+`WTD-4T`+`PDU`+organizery). AP/switch =
+  Alcatel‑Lucent (`OAW-AP1301H-RW`, `OS6560-P24X4-EU`).
+- **Kosztorys/Zestawienie** (`src/domain/installations/kosztorysExport.ts`, `buildKosztorys`):
+  BOM → dekompozycja na SKU + dopełnienie infrastruktury (przełącznice/switche/szafy z liczby
+  portów) → grupy Pasywne/Aktywne/Telefony, **Lp ciągłe**, `Netto=Ilość×Cena`, `Brutto=Netto×1,23`.
+- **Eksport XLSX** w formacie klienta: sidecar `export_kosztorys` (openpyxl) — arkusze
+  `KOSZTORYS/ZESTAWIENIE CAŁOŚĆ` + para na kategorię, nagłówki `Lp|Towar|Ilość|Cena|Waluta|Netto|
+  Brutto|Nazwa`. IPC `kosztorys:export`, przycisk „Eksportuj kosztorys (XLSX)". PyInstaller:
+  `--hidden-import openpyxl`. **openpyxl w `sidecar/requirements.txt`.**
+- **Elewacja szaf** (`src/domain/installations/rack.ts`, `buildRacks`): z liczby portów buduje
+  model `Rack` (przełącznice + switche + organizery w U, od dołu, 42U) → `bundle.racks`. Podgląd
+  SVG w panelu „Szafy" (`components/RackElevation.tsx`), eksport DXF: sidecar
+  `export_rack_elevation` (rama 19" 482,6 mm, U, opisy), IPC `rack:export`, przycisk „Eksportuj
+  elewację szaf (DXF)".
+- **GOTCHA UTF‑8 sidecara**: protokół JSON jest UTF‑8, a na Windows stdio Pythona domyślnie
+  cp125x → polskie znaki w danych z requestu się rozsypywały (np. „MODUŁ"). Naprawione:
+  `sys.stdin/stdout.reconfigure(encoding="utf-8")` w `main()` (`server.py`). Test regresji w
+  `tests/kosztorys-export.test.ts` (round‑trip „MODUŁ"/„PRZEŁACZNICA").
+- **Dalej**: kategoria Telefony (OmniPCX) w autodesign, ręczne przesuwanie pozycji w szafie,
+  XREF podkładu, eksport PDF, DORI (F4).
+
 ## Pierwsze uruchomienie w nowej instancji
 ```bash
 git clone https://github.com/mike88pas/infra-design.git

@@ -159,6 +159,10 @@ export function ImportWizard({ doc, fileName, initial, onConfirm, onCancel }: Im
                 <input type="radio" checked={profile.roomSource === 'walls'} onChange={() => set('roomSource', 'walls')} />
                 <span>Ze ścian (polygonize)</span>
               </label>
+              <label className="flex items-center gap-2">
+                <input type="radio" checked={profile.roomSource === 'schedule'} onChange={() => set('roomSource', 'schedule')} />
+                <span>Tabela „Zestawienie" (DWG z PDF)</span>
+              </label>
             </div>
             <label className="flex items-center gap-2">
               <input type="checkbox" checked={profile.explodeBlocks} onChange={(e) => set('explodeBlocks', e.target.checked)} />
@@ -172,6 +176,19 @@ export function ImportWizard({ doc, fileName, initial, onConfirm, onCancel }: Im
                   onChange={(e) => set('areaLayers', e.target.value.split(',').map((s) => s.trim()).filter(Boolean))}
                 />
               </Field>
+            ) : profile.roomSource === 'schedule' ? (
+              <div className="grid grid-cols-2 gap-2">
+                <Field label="Nagłówek kolumny nazwy">
+                  <input className={inp} value={profile.scheduleHeaderName} onChange={(e) => set('scheduleHeaderName', e.target.value)} />
+                </Field>
+                <Field label="Nagłówek kolumny powierzchni">
+                  <input className={inp} value={profile.scheduleHeaderArea} onChange={(e) => set('scheduleHeaderArea', e.target.value)} />
+                </Field>
+                <p className="col-span-2 text-xs text-slate-400">
+                  Wykaz z tabeli „Zestawienie" (numer · nazwa · m²) łączony z etykietami-numerami na rzucie.
+                  Kalibracja skali rysunku idzie przez „mm na jednostkę" (np. 1:100 → 100).
+                </p>
+              </div>
             ) : (
               <Field label="Warstwy ścian (tokeny, po przecinku — dopasowanie po podłańcuchu)">
                 <input

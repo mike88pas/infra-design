@@ -54,9 +54,21 @@ commituj plików klienta (*.dxf/*.dwg/*.infra) ani realnych danych do `web/`.
 - **Walidacja norm** w UI: PN-EN 50173 (kanał LAN ≤90 m). DORI → F4.
 - **Eksport DXF** (`export_dxf`): symbole per system, trasy, legenda — overlay (docelowo XREF).
 
+**KOSZTORYS + SZAFY DONE** (na bazie realnych projektów SOS klienta — paczka w
+`~/Documents/InfraDesign/_reference/`, poza repo, NDA). Patrz `docs/NEXT_STEPS.md` + pamięć
+[[real-catalog-kosztorys-format]]:
+- **Realny katalog rozszerzony** (`catalog.ts`): `category` (pasywne/aktywne/telefony), `uSize`,
+  `components` — rozkład pozycji na realne SKU (Fibrain keystone + Alcatel‑Lucent OmniSwitch/Stellar).
+- **Eksport kosztorysu/zestawienia do XLSX** w formacie inwestorskim klienta
+  (`kosztorysExport.ts` + sidecar `export_kosztorys` openpyxl): arkusze Kosztorys/Zestawienie per
+  kategoria + CAŁOŚĆ, `Lp|Towar|Ilość|Cena|Waluta|Netto|Brutto|Nazwa`, Brutto=Netto×1,23.
+- **Elewacja szaf 19"** (`rack.ts` `buildRacks` → `bundle.racks`): podgląd SVG (`RackElevation.tsx`)
+  + eksport DXF (sidecar `export_rack_elevation`).
+- **Fix UTF‑8** stdio sidecara (polskie znaki w danych z protokołu na Windows).
+
 Kreator importu (`ImportWizard.tsx`) ma tryb **extract / autodesign**. Roadmapa: `docs/ROADMAP.md`.
 Następne (pełne Rysunki PW): bloki symboli, ramka/tabelka PN, XREF podkładu, ręczne przesuwanie
-urządzeń na canvas, eksport PDF, DORI (model pokrycia kamer, F4).
+urządzeń na canvas, eksport PDF, kategoria Telefony (OmniPCX), DORI (model pokrycia kamer, F4).
 
 **Demo dla klienta:** webowy target `web/` (reużywa `@core/cad`) na
 **https://infra-design-app.web.app** (Firebase Hosting, projekt `infra-design-app`). Pipeline:

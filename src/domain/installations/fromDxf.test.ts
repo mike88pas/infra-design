@@ -51,8 +51,9 @@ describe('F1→F2 end-to-end: INSERT → Device → BOM → kosztorys', () => {
   it('kosztorys liczy się i jest dodatni (brutto > netto > 0)', () => {
     expect(cost.net).toBeGreaterThan(0)
     expect(cost.gross).toBeGreaterThan(cost.net)
-    // 3·(85+45) + 2·(470+70) + 2·(560+90) = 390 + 1080 + 1300 = 2770 netto
-    expect(cost.net).toBeCloseTo(2770, 2)
+    // 3·(85+45) + 2·(2284.2+90) + 2·(560+90) = 390 + 4748.4 + 1300 = 6438.4 netto
+    // (AP = realna cena OmniAccess Stellar AP1301H z katalogu klienta)
+    expect(cost.net).toBeCloseTo(6438.4, 2)
   })
 
   it('zachowuje audytowalność (sourceRefs po Id urządzeń)', () => {

@@ -30,9 +30,10 @@ const api = {
   },
   dxf: {
     import: (
-      filePath?: string
+      filePath?: string,
+      opts?: { maxRenderEntities?: number }
     ): Promise<{ imported: boolean; filePath?: string; doc?: DxfDocument }> =>
-      ipcRenderer.invoke('dxf:import', filePath),
+      ipcRenderer.invoke('dxf:import', filePath, opts),
     polygonize: (params: {
       path: string
       wallLayers?: string[]
@@ -50,6 +51,14 @@ const api = {
       areaLayers?: string[]
       explodeBlocks?: boolean
     }): Promise<ExtractRoomsResult> => ipcRenderer.invoke('dxf:extractRooms', params),
+    extractRoomsSchedule: (params: {
+      path: string
+      explodeBlocks?: boolean
+      scale?: number
+      headerName?: string
+      headerArea?: string
+    }): Promise<ExtractRoomsResult & { table_rows: number; plan_labels: number; unmatched: string[] }> =>
+      ipcRenderer.invoke('dxf:extractRoomsSchedule', params),
     routeCables: (params: {
       path: string
       sources: { x: number; y: number }[]
@@ -68,6 +77,20 @@ const api = {
       meta: Record<string, string>
     }): Promise<{ exported: boolean; path?: string; devices?: number; routes?: number }> =>
       ipcRenderer.invoke('dxf:export', params)
+  },
+  kosztorys: {
+    export: (params: {
+      kosztorys: unknown
+      meta?: { project?: string }
+    }): Promise<{ exported: boolean; path?: string; sheets?: number; rows?: number }> =>
+      ipcRenderer.invoke('kosztorys:export', params)
+  },
+  rack: {
+    export: (params: {
+      racks: Array<{ name: string; uHeight: number; units: Array<{ uPos: number; uSize: number; label: string }> }>
+      meta?: Record<string, string>
+    }): Promise<{ exported: boolean; path?: string; racks?: number; units?: number }> =>
+      ipcRenderer.invoke('rack:export', params)
   },
   project: {
     new: (name: string): Promise<ProjectBundle> => ipcRenderer.invoke('project:new', name),

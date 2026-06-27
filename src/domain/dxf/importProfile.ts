@@ -26,14 +26,26 @@ export interface ImportProfile {
   unitMm: number
 
   // ── Geometria pomieszczeń ──
-  /** Źródło pomieszczeń: etykiety pól (A-AREA, czyste) lub rekonstrukcja ze ścian. */
-  roomSource: 'area' | 'walls'
+  /**
+   * Źródło pomieszczeń:
+   *  - 'area'     — etykiety pól (A-AREA, czyste),
+   *  - 'walls'    — rekonstrukcja ze ścian (polygonize),
+   *  - 'schedule' — TABELA „Zestawienie" (numer|nazwa|m²) + etykiety-numery na rzucie;
+   *                 dla DWG zwektoryzowanych z PDF (brak warstw pól ani PST_*).
+   */
+  roomSource: 'area' | 'walls' | 'schedule'
   /** Tokeny warstw etykiet pól (dla roomSource='area'). */
   areaLayers: string[]
   /** Tokeny warstw ścian do `polygonize`/trasowania (dopasowanie po podłańcuchu). */
   wallLayers: string[]
   /** Wejść w bloki INSERT (podkład architektoniczny bywa jednym blokiem). */
   explodeBlocks: boolean
+  /** (schedule) Mnożnik pozycji etykiet (zwykle 1.0 — kalibracja idzie przez `unitMm`). */
+  scheduleScale: number
+  /** (schedule) Nagłówek kolumny nazwy w tabeli zestawienia. */
+  scheduleHeaderName: string
+  /** (schedule) Nagłówek kolumny powierzchni w tabeli zestawienia. */
+  scheduleHeaderArea: string
 
   // ── Instalacje ──
   /** Tryb: 'extract' = odczytaj naniesione urządzenia; 'autodesign' = zaprojektuj od zera. */
@@ -78,16 +90,29 @@ export interface DefaultProfileInput {
 export function buildDefaultProfile(input: DefaultProfileInput): ImportProfile {
   const fileName = input.fileName ?? ''
   const wall = guessWallLayers(input.layers)
+  // Źródło pomieszczeń: A-AREA → 'area'; DWG z PDF (warstwy PDF_*, bez warstw pól)
+  // → 'schedule' (tabela zestawienia); inaczej rekonstrukcja ze ścian.
+  const roomSource: ImportProfile['roomSource'] = input.layers.some((l) => /area/i.test(l.name))
+    ? 'area'
+    : input.layers.some((l) => /^PDF_|PDF_/i.test(l.name))
+      ? 'schedule'
+      : 'walls'
+  // Kalibracja: rzut zwektoryzowany z PDF (schedule) jest w skali ARKUSZA 1:100 — 1 jednostka
+  // = 1 mm papieru = 100 mm realnych → unitMm=100. Inaczej długości kabli i rozstaw urządzeń
+  // wychodzą 100× za małe. (Pole edytowalne + narzędzie kalibracji dla innych skal.)
+  const unitMm = roomSource === 'schedule' ? 100 : input.units === 'm' ? 1000 : 1
   return {
     projectName: input.projectName ?? '',
     client: input.client ?? '',
     drawingName: fileName.replace(/\.dxf$/i, ''),
     level: guessLevel(fileName),
     units: input.units,
-    unitMm: input.units === 'm' ? 1000 : 1,
-    // Etykiety pól (A-AREA) gdy są w rysunku — czystsze pomieszczenia niż ze ścian.
-    roomSource: input.layers.some((l) => /area/i.test(l.name)) ? 'area' : 'walls',
+    unitMm,
+    roomSource,
     areaLayers: ['AREA'],
+    scheduleScale: 1.0,
+    scheduleHeaderName: 'Pomieszczenie',
+    scheduleHeaderArea: 'Powierzchnia',
     // Domyślnie tokeny ścian z warstw; gdy brak — generyczny token 'WALL' (łapie A-WALL po eksplozji).
     wallLayers: wall.length ? wall : ['WALL'],
     explodeBlocks: true,

@@ -75,14 +75,15 @@ def validate_in_path(path, extra_roots=None) -> str:
     return str(p)
 
 
-def validate_out_path(path, extra_roots=None) -> str:
-    """Waliduje ścieżkę pliku WYJŚCIOWEGO DXF (eksport). Katalog docelowy musi
+def validate_out_path(path, extra_roots=None, allowed_ext=(".dxf",)) -> str:
+    """Waliduje ścieżkę pliku WYJŚCIOWEGO (eksport DXF/XLSX). Katalog docelowy musi
     istnieć i leżeć w dozwolonym obszarze; odmawia nadpisania pliku/symlinku,
-    który wskazuje poza obszar."""
+    który wskazuje poza obszar. `allowed_ext` — dozwolone rozszerzenia wyjścia."""
     if not path:
         raise ValueError("brak parametru 'path'")
     p = Path(str(path))
-    if p.suffix.lower() != ".dxf":
+    allowed = {e.lower() for e in allowed_ext}
+    if p.suffix.lower() not in allowed:
         raise PermissionError(f"niedozwolone rozszerzenie wyjścia: {p.suffix!r}")
     parent = p.parent.resolve(strict=True)  # katalog docelowy musi istnieć
     target = parent / p.name

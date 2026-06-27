@@ -1,0 +1,49 @@
+appId: com.thebestagency.infradesign
+productName: Infra Design
+copyright: © 2026 The Best Agency
+
+directories:
+  output: dist
+  buildResources: resources
+
+# Pakujemy zbudowaną aplikację (out/) + produkcyjne node_modules; wykluczamy źródła/dev.
+files:
+  - '!**/.vscode/*'
+  - '!src/*'
+  - '!sidecar/*'
+  - '!web/*'
+  - '!tests/*'
+  - '!docs/*'
+  - '!scripts/*'
+  - '!build/*'
+  - '!dist/*'
+  - '!resources/*'
+  - '!**/*.{md,map}'
+  - '!electron.vite.config.{js,ts,mjs,cjs}'
+  - '!{.eslintrc.cjs,.prettierrc,.prettierignore,.editorconfig,.gitignore}'
+  - '!{tsconfig.json,tsconfig.node.json,tsconfig.web.json,vitest.config.ts,postcss.config.js,tailwind.config.js}'
+  - '!{electron-builder.yml,firebase.json,.firebaserc}'
+  - '!launch-infra-design.bat'
+
+# Sidecar (PyInstaller) + ikona okna — poza asar, w process.resourcesPath.
+extraResources:
+  - from: resources/sidecar
+    to: sidecar
+    filter: ['**/*']
+  - from: resources/icon.png
+    to: icon.png
+
+win:
+  target:
+    - nsis
+  icon: resources/icon.ico
+  artifactName: ${productName} Setup ${version}.${ext}
+
+nsis:
+  oneClick: false
+  perMachine: false
+  allowToChangeInstallationDirectory: true
+  createDesktopShortcut: true
+  createStartMenuShortcut: true
+  shortcutName: Infra Design
+  uninstallDisplayName: Infra Design ${version}

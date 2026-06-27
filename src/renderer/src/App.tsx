@@ -3,18 +3,23 @@ import type { BomItem, Device, DxfDocument, DxfRoom, Point, ProjectBundle, Space
 import { createEmptyBundle, createEmptyProject } from '../../domain/model/schema'
 import { autoDesign } from '../../domain/installations/autodesign'
 import { CadViewer } from '@core/cad/CadViewer'
-import { polygonsToSpaces, type CadScene, type RenderSpace } from '@core/cad'
+import { polygonsToSpaces, type CadScene, type RenderSpace, type RenderDevice, type RenderRoute } from '@core/cad'
 import {
   guessLayerRoles,
   guessWallLayers,
   type LayerRole
 } from '../../domain/dxf/layerMapping'
 import { ImportWizard } from './components/ImportWizard'
+import { About } from './components/About'
+import { Logo } from './components/Logo'
+import { RackElevation } from './components/RackElevation'
 import type { ImportProfile } from '../../domain/dxf/importProfile'
 import { roomsToSpaces } from '../../domain/dxf/rooms'
 import { devicesFromInserts, countByTypeKey } from '../../domain/installations/fromDxf'
 import { buildBom } from '../../domain/installations/bom'
 import { buildCost, PLN, type CostSummary } from '../../domain/installations/cost'
+import { buildKosztorys } from '../../domain/installations/kosztorysExport'
+import { buildRacks } from '../../domain/installations/rack'
 import { CATALOG } from '../../domain/installations/catalog'
 import { buildCableRoutes } from '../../domain/installations/routing'
 import { runAudit } from '../../domain/norms/audit'
@@ -70,6 +75,7 @@ export default function App(): JSX.Element {
   // Kreator importu instalacji (F2)
   const [wizardOpen, setWizardOpen] = useState(false)
   const [summary, setSummary] = useState<ImportSummary | null>(null)
+  const [aboutOpen, setAboutOpen] = useState(false)
 
   const sceneRef = useRef<CadScene | null>(null)
 
@@ -78,6 +84,24 @@ export default function App(): JSX.Element {
   const totalArea = useMemo(
     () => spaces.reduce((s, sp) => s + sp.area, 0) / 1_000_000,
     [spaces]
+  )
+
+  // Zaprojektowane urządzenia + trasy (z bundla) → render na rzucie. Pozycje są w jednostkach
+  // rysunku (jak podkład), więc symbole nakładają się na właściwe miejsca.
+  const renderDevices = useMemo<RenderDevice[]>(
+    () =>
+      (bundle?.devices ?? []).map((d) => ({
+        id: d.id,
+        system: d.system,
+        typeKey: d.typeKey,
+        position: d.position,
+        rotation: d.rotation
+      })),
+    [bundle]
+  )
+  const renderRoutes = useMemo<RenderRoute[]>(
+    () => (bundle?.routes ?? []).map((r) => ({ id: r.id, system: r.system, path: r.path })),
+    [bundle]
   )
 
   async function ping(): Promise<void> {
@@ -177,14 +201,24 @@ export default function App(): JSX.Element {
   async function importInstallations(): Promise<void> {
     setStatus({ kind: 'idle', text: 'Wczytuję DXF…' })
     try {
-      const res = await window.infra.dxf.import()
+      // Podkład tylko poglądowy — ogranicz encje, by ciężkie rzuty (np. zwektoryzowane
+      // z PDF) nie zatkały renderera. Projekt liczy się z wykazu pomieszczeń, nie geometrii.
+      const res = await window.infra.dxf.import(undefined, { maxRenderEntities: 6000 })
       if (!res.imported || !res.doc || !res.filePath) {
         setStatus({ kind: 'idle', text: 'Import anulowany' })
         return
       }
       setDoc(res.doc)
       setDxfPath(res.filePath)
-      setLayerVisibility(Object.fromEntries(res.doc.layers.map((l) => [l.name, l.visible])))
+      // Domyślnie chowamy warstwy podkładu, które zaśmiecają widok instalacji: tekst architekta
+      // (dubluje nasze numery) i wypełnienia. Dla rzutów z PDF to '文字' (tekst) i '填充'
+      // (wypełnienie). Użytkownik może je włączyć z powrotem w panelu WARSTWY.
+      const noisy = ['文字', '填充', 'TEXT', 'HATCH', 'FILL']
+      setLayerVisibility(
+        Object.fromEntries(
+          res.doc.layers.map((l) => [l.name, l.visible && !noisy.some((t) => l.name.includes(t))])
+        )
+      )
       setSpaces([])
       setSummary(null)
       setWizardOpen(true)
@@ -210,12 +244,24 @@ export default function App(): JSX.Element {
           explodeBlocks: profile.explodeBlocks
         })
         rooms = rr.rooms
+      } else if (profile.roomSource === 'schedule') {
+        const rr = await window.infra.dxf.extractRoomsSchedule({
+          path: dxfPath,
+          explodeBlocks: profile.explodeBlocks,
+          scale: profile.scheduleScale,
+          headerName: profile.scheduleHeaderName,
+          headerArea: profile.scheduleHeaderArea
+        })
+        rooms = rr.rooms
       } else {
         const poly = await window.infra.dxf.polygonize({
           path: dxfPath,
           wallLayers: profile.wallLayers,
           explodeBlocks: profile.explodeBlocks
         })
+        if ((poly as { error?: string }).error) {
+          throw new Error((poly as { error?: string }).error)
+        }
         rooms = poly.polygons.map((p, i) => ({
           number: '',
           name: `Pom. ${i + 1}`,
@@ -242,6 +288,8 @@ export default function App(): JSX.Element {
         const ad = autoDesign(rooms, {
           drawingId,
           idPrefix: `L${profile.level}`,
+          // Odstęp urządzeń ~0.8 m w jednostkach modelu (800 mm / mm-na-jednostkę).
+          spacing: 800 / profile.unitMm,
           rules: { lan: { m2PerOutlet: profile.autoM2PerOutlet, minPerRoom: 1 } }
         })
         devices = ad.devices
@@ -265,12 +313,15 @@ export default function App(): JSX.Element {
       let routedAstar = 0
       if (profile.doRouting && devices.length && targets.length) {
         setStatus({ kind: 'idle', text: 'Trasuję kable (A*) — to może chwilę potrwać…' })
+        // Tryb 'schedule' (DWG z PDF): geometria zaszumiona → trasy po OTWARTEJ siatce
+        // (nie traktujemy wektoryzacji jako ścian); inaczej ściany z profilu.
+        const routeWalls = profile.roomSource === 'schedule' ? ['__NOWALL__'] : profile.wallLayers
         const rc = await window.infra.dxf.routeCables({
           path: dxfPath,
           sources: devices.map((d) => d.position),
           targets,
-          wallLayers: profile.wallLayers,
-          explodeBlocks: profile.explodeBlocks
+          wallLayers: routeWalls,
+          explodeBlocks: profile.roomSource === 'schedule' ? false : profile.explodeBlocks
         })
         routedAstar = rc.routes.filter((r) => r.method === 'astar').length
         routes = buildCableRoutes({ devices, routes: rc.routes, unitMm: profile.unitMm, cabinetIds })
@@ -357,13 +408,18 @@ export default function App(): JSX.Element {
         bbox: doc?.bbox ?? { minX: 0, minY: 0, maxX: 0, maxY: 0 }
       }
       const drawings = [...base.drawings.filter((d) => d.id !== drawingId), drawing]
+      const allDevices = [...keepDev, ...devices]
+      // Szafy: jedna na kondygnację (cel tras autodesign) — model elewacji 19".
+      const cabs = drawings.map((d) => ({ id: `${d.id}::rack`, name: `Szafa IDF — ${d.name}` }))
+      const racks = buildRacks(allDevices, cabs)
       return {
         ...base,
         project: { ...base.project, updatedAt: new Date().toISOString() },
         drawings,
         spaces: [...keepSpace, ...domainSpaces],
-        devices: [...keepDev, ...devices],
+        devices: allDevices,
         routes: [...keepRoute, ...routes],
+        racks,
         bom,
         costs: cost.items,
         validations
@@ -421,6 +477,55 @@ export default function App(): JSX.Element {
     }
   }
 
+  async function exportKosztorys(): Promise<void> {
+    if (!bundle || !bundle.bom.length) {
+      setStatus({ kind: 'idle', text: 'Brak pozycji do kosztorysu — najpierw zaprojektuj/zaimportuj' })
+      return
+    }
+    setStatus({ kind: 'idle', text: 'Eksportuję kosztorys (XLSX)…' })
+    try {
+      // Liczba szaf = jedna na kondygnację (cel tras autodesign).
+      const cabinetCount = Math.max(1, bundle.drawings.length)
+      const kosztorys = buildKosztorys(bundle.bom, {
+        vatPct: 23,
+        cabinetCount,
+        projectName: bundle.project.name
+      })
+      const res = await window.infra.kosztorys.export({
+        kosztorys,
+        meta: { project: bundle.project.name }
+      })
+      if (res.exported)
+        setStatus({
+          kind: 'ok',
+          text: `Wyeksportowano kosztorys: ${res.path} (${res.rows} pozycji, ${res.sheets} arkuszy)`
+        })
+      else setStatus({ kind: 'idle', text: 'Eksport anulowany' })
+    } catch (e) {
+      setStatus({ kind: 'err', text: `Eksport kosztorysu: ${(e as Error).message}` })
+    }
+  }
+
+  async function exportRacks(): Promise<void> {
+    if (!bundle || !bundle.racks.length) {
+      setStatus({ kind: 'idle', text: 'Brak szaf do eksportu — najpierw zaprojektuj/zaimportuj' })
+      return
+    }
+    setStatus({ kind: 'idle', text: 'Eksportuję elewację szaf (DXF)…' })
+    try {
+      const des = bundle.designers[0]
+      const res = await window.infra.rack.export({
+        racks: bundle.racks,
+        meta: { project: bundle.project.name, designer: des?.fullName ?? '', license: des?.licenseNo ?? '' }
+      })
+      if (res.exported)
+        setStatus({ kind: 'ok', text: `Wyeksportowano elewację szaf: ${res.path} (${res.racks} szaf, ${res.units} poz.)` })
+      else setStatus({ kind: 'idle', text: 'Eksport anulowany' })
+    } catch (e) {
+      setStatus({ kind: 'err', text: `Eksport szaf: ${(e as Error).message}` })
+    }
+  }
+
   function toggleLayer(name: string): void {
     setLayerVisibility((v) => ({ ...v, [name]: !v[name] }))
   }
@@ -469,13 +574,25 @@ export default function App(): JSX.Element {
   return (
     <div className="flex h-full flex-col bg-ink text-slate-100">
       <header className="flex items-center justify-between border-b border-white/10 px-6 py-3">
-        <div>
-          <h1 className="text-lg font-semibold tracking-tight">
-            Infra<span className="text-accent">Design</span>
-          </h1>
-          <p className="text-xs text-slate-400">Projektowanie instalacji budynkowych · F1 DXF</p>
+        <div className="flex items-center gap-3">
+          <Logo className="h-9 w-9" />
+          <div>
+            <h1 className="text-lg font-semibold tracking-tight">
+              Infra<span className="text-accent">Design</span>
+            </h1>
+            <p className="text-xs text-slate-400">Projektowanie instalacji budynkowych · by The Best Agency</p>
+          </div>
         </div>
-        <span className="rounded bg-white/5 px-2 py-1 text-xs text-slate-400">sidecar: {sidecarInfo}</span>
+        <div className="flex items-center gap-2">
+          <span className="rounded bg-white/5 px-2 py-1 text-xs text-slate-400">sidecar: {sidecarInfo}</span>
+          <button
+            onClick={() => setAboutOpen(true)}
+            title="O programie"
+            className="rounded bg-white/5 px-2.5 py-1 text-xs text-slate-300 hover:bg-white/10"
+          >
+            O programie
+          </button>
+        </div>
       </header>
 
       <main className="flex min-h-0 flex-1">
@@ -499,6 +616,23 @@ export default function App(): JSX.Element {
           <button onClick={exportDrawing} disabled={!bundle?.devices.length} className="rounded bg-white/10 px-3 py-2 text-xs hover:bg-white/15 disabled:opacity-30">
             Eksportuj rysunek DXF
           </button>
+
+          <button onClick={exportKosztorys} disabled={!bundle?.bom.length} className="rounded bg-sky-400/15 px-3 py-2 text-xs font-medium text-sky-300 hover:bg-sky-400/25 disabled:opacity-30">
+            Eksportuj kosztorys (XLSX)
+          </button>
+
+          <button onClick={exportRacks} disabled={!bundle?.racks.length} className="rounded bg-white/10 px-3 py-2 text-xs hover:bg-white/15 disabled:opacity-30">
+            Eksportuj elewację szaf (DXF)
+          </button>
+
+          {bundle && bundle.racks.length > 0 && (
+            <section className="mt-1 space-y-2">
+              <h2 className="text-xs font-semibold uppercase tracking-wide text-slate-400">Szafy (elewacja 19")</h2>
+              {bundle.racks.map((r) => (
+                <RackElevation key={r.id} rack={r} />
+              ))}
+            </section>
+          )}
 
           {doc && (
             <button onClick={startCalibration} className="rounded bg-white/10 px-3 py-2 text-xs hover:bg-white/15">
@@ -567,6 +701,8 @@ export default function App(): JSX.Element {
             <CadViewer
               doc={doc}
               spaces={spaces}
+              devices={renderDevices}
+              routes={renderRoutes}
               layerVisibility={layerVisibility}
               onHoverSpace={setHovered}
               onReady={(s) => (sceneRef.current = s)}
@@ -645,7 +781,11 @@ export default function App(): JSX.Element {
         />
       )}
 
-      <footer className={`border-t border-white/10 px-6 py-2 text-xs ${statusColor}`}>{status.text}</footer>
+      <footer className={`flex items-center justify-between border-t border-white/10 px-6 py-2 text-xs ${statusColor}`}>
+        <span>{status.text}</span>
+        <span className="text-slate-500">© 2026 The Best Agency</span>
+      </footer>
+      <About open={aboutOpen} onClose={() => setAboutOpen(false)} />
     </div>
   )
 }

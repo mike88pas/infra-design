@@ -14,6 +14,11 @@
  *   - etykiety pomieszczeń o stałym rozmiarze ekranowym (counter-scale).
  */
 
+// CSP desktopu (script-src 'self', bez 'unsafe-eval') blokuje domyślny PixiJS (używa eval/
+// new Function przy syncu uniformów/shaderów) → renderer pada, czarny ekran. Ten moduł
+// podmienia te ścieżki na polyfille bez eval (self-install przy imporcie). MUSI być przed
+// pierwszym użyciem Application.
+import 'pixi.js/unsafe-eval'
 import { Application, Container, Graphics, Text } from 'pixi.js'
 import RBush from 'rbush'
 import type { BBox, DxfDocument, DxfEntity, Point } from '@domain/model/schema'
@@ -26,6 +31,22 @@ export interface RenderSpace {
   name: string
   polygon: Point[]
   area: number
+}
+
+/** Urządzenie do narysowania na rzucie (symbol per system/typ). */
+export interface RenderDevice {
+  id: string
+  system: string
+  typeKey: string
+  position: Point
+  rotation: number
+}
+
+/** Trasa kablowa do narysowania (polilinia). */
+export interface RenderRoute {
+  id: string
+  system: string
+  path: Point[]
 }
 
 export interface CadSceneOptions {
@@ -53,6 +74,9 @@ export class CadScene {
   private textContainer = new Container()
   private spacesContainer = new Container()
   private spaceLabels: Text[] = []
+  private routesContainer = new Container() // trasy kablowe (pod urządzeniami)
+  private devicesContainer = new Container() // symbole urządzeń (nad podkładem)
+  private legendContainer = new Container() // legenda (stały rozmiar ekranowy)
   private highlight = new Graphics()
   private spaceIndex = new RBush<SpaceIndexNode>()
 
@@ -69,6 +93,11 @@ export class CadScene {
   private onMeasure: ((modelDist: number, a: Point, b: Point) => void) | null = null
   private resizeObs: ResizeObserver | null = null
   private readonly opts: CadSceneOptions
+  // Cykl życia: app.init() jest async; React StrictMode (dev) montuje→odmontowuje→montuje,
+  // więc destroy() bywa wołany ZANIM init() się dokończy. Bez tych flag app.destroy() leci na
+  // niezainicjalizowanym PixiJS → `_cancelResize is not a function` → czarny ekran.
+  private initialized = false
+  private destroyRequested = false
 
   constructor(opts: CadSceneOptions = {}) {
     this.opts = opts
@@ -84,21 +113,32 @@ export class CadScene {
       autoDensity: true,
       resolution: window.devicePixelRatio || 1
     })
+    // Odmontowano w trakcie init() (StrictMode/szybki unmount) → posprzątaj i nie montuj.
+    if (this.destroyRequested) {
+      this.app.destroy(true, { children: true })
+      return
+    }
+    this.initialized = true
     parent.appendChild(this.app.canvas)
 
     this.world.addChild(this.spacesContainer)
+    this.world.addChild(this.routesContainer) // trasy pod urządzeniami
+    this.world.addChild(this.devicesContainer) // urządzenia nad trasami
     this.world.addChild(this.highlight)
     this.world.addChild(this.textContainer)
     this.world.addChild(this.measureGfx)
     this.app.stage.addChild(this.world)
+    // Legenda — przyklejona do ekranu (poza transformacją world: nie pan/zoom).
+    this.app.stage.addChild(this.legendContainer)
+    this.legendContainer.position.set(12, 12)
 
     this.bindInteractions()
     this.resizeObs = new ResizeObserver(() => this.applyTransform())
     this.resizeObs.observe(parent)
   }
 
-  /** Wczytuje rysunek + pomieszczenia i dopasowuje widok. */
-  load(doc: DxfDocument, spaces: RenderSpace[]): void {
+  /** Wczytuje rysunek + pomieszczenia (+ opcjonalnie urządzenia/trasy) i dopasowuje widok. */
+  load(doc: DxfDocument, spaces: RenderSpace[], devices: RenderDevice[] = [], routes: RenderRoute[] = []): void {
     this.clear()
     this.bbox = doc.bbox
 
@@ -146,10 +186,14 @@ export class CadScene {
       this.spacesContainer.addChild(g)
 
       const c = centroid(s.polygon)
-      const areaM2 = s.area / 1_000_000 // mm² → m² (model w mm)
+      // Etykieta zwięzła: sam numer pomieszczenia (np. „0.14"), gdy nazwa nim się zaczyna —
+      // inaczej pełna nazwa. Pełny opis (nazwa + metraż) w panelu / dymku po najechaniu.
+      // 44 etykiet z numerem+nazwą+metrażem nachodziło na siebie (nieczytelne).
+      const tok = s.name.split(/\s+/)[0]
+      const labelText = /^[\d]/.test(tok) ? tok : s.name
       const label = new Text({
-        text: `${s.name}\n${areaM2.toFixed(1)} m²`,
-        style: { fontFamily: 'sans-serif', fontSize: 14, fill: 0xe2e8f0, align: 'center' }
+        text: labelText,
+        style: { fontFamily: 'sans-serif', fontSize: 11, fill: 0xf1f5f9, align: 'center' }
       })
       label.anchor.set(0.5)
       label.position.set(c.x, c.y)
@@ -162,7 +206,81 @@ export class CadScene {
     this.spaceIndex.clear()
     this.spaceIndex.load(idxNodes)
 
+    // Trasy kablowe (polilinie, pod urządzeniami).
+    for (const r of routes) {
+      if (r.path.length < 2) continue
+      const g = new Graphics()
+      g.moveTo(r.path[0].x, r.path[0].y)
+      for (let i = 1; i < r.path.length; i++) g.lineTo(r.path[i].x, r.path[i].y)
+      g.stroke({ width: lw * 2, color: this.systemColor(r.system), alpha: 0.55 })
+      this.routesContainer.addChild(g)
+    }
+
+    // Urządzenia (symbole per system: AP=koło, kamera=trójkąt, gniazdo/reszta=kwadrat).
+    const ds = lw * 12 // pół-bok symbolu w jednostkach świata
+    for (const d of devices) {
+      const color = this.systemColor(d.system)
+      const { x, y } = d.position
+      const g = new Graphics()
+      if (d.typeKey.startsWith('lan.ap')) {
+        g.circle(x, y, ds)
+      } else if (d.system === 'cctv') {
+        g.poly([
+          { x: x - ds, y: y - ds },
+          { x: x + ds, y: y - ds },
+          { x, y: y + ds }
+        ])
+      } else {
+        g.rect(x - ds, y - ds, ds * 2, ds * 2)
+      }
+      g.fill({ color, alpha: 0.25 }).stroke({ width: lw * 1.2, color })
+      this.devicesContainer.addChild(g)
+    }
+
+    this.buildLegend(devices)
     this.fit()
+  }
+
+  /** Kolor wiodący systemu instalacji (symbole + trasy). */
+  private systemColor(system: string): number {
+    switch (system) {
+      case 'lan':
+        return 0x38bdf8 // niebieski
+      case 'cctv':
+        return 0xef4444 // czerwony
+      case 'sap':
+        return 0xf59e0b // pomarańczowy (PPOŻ)
+      case 'kd':
+        return 0xa78bfa // fiolet
+      default:
+        return 0x94a3b8 // szary
+    }
+  }
+
+  /** Legenda (system → liczba urządzeń) — przyklejona do ekranu, lewy-górny róg. */
+  private buildLegend(devices: RenderDevice[]): void {
+    this.legendContainer.removeChildren().forEach((c) => c.destroy())
+    if (!devices.length) return
+    const byType = new Map<string, number>()
+    for (const d of devices) byType.set(d.typeKey, (byType.get(d.typeKey) ?? 0) + 1)
+
+    const bg = new Graphics()
+    this.legendContainer.addChild(bg)
+    let row = 0
+    const rowH = 18
+    for (const [typeKey, n] of byType) {
+      const system = typeKey.split('.')[0]
+      const dot = new Graphics().rect(6, 8 + row * rowH, 10, 10).fill({ color: this.systemColor(system) })
+      const t = new Text({
+        text: `${typeKey}: ${n}`,
+        style: { fontFamily: 'sans-serif', fontSize: 12, fill: 0xe2e8f0 }
+      })
+      t.position.set(22, 6 + row * rowH)
+      this.legendContainer.addChild(dot)
+      this.legendContainer.addChild(t)
+      row++
+    }
+    bg.roundRect(0, 0, 160, 12 + row * rowH, 6).fill({ color: 0x0b1220, alpha: 0.7 })
   }
 
   /** Lista warstw aktualnie wczytanych (do panelu UI). */
@@ -213,8 +331,14 @@ export class CadScene {
   }
 
   destroy(): void {
+    this.destroyRequested = true
     this.resizeObs?.disconnect()
-    this.app.destroy(true, { children: true })
+    // Niszcz tylko, gdy init() się dokończył — inaczej PixiJS rzuca `_cancelResize is not a
+    // function`. Gdy init jeszcze trwa, posprząta po sobie sam mount() (patrz destroyRequested).
+    if (this.initialized) {
+      this.initialized = false
+      this.app.destroy(true, { children: true })
+    }
   }
 
   // ── rysowanie encji ──────────────────────────────────────────────────────
@@ -373,6 +497,9 @@ export class CadScene {
     this.layerContainers.clear()
     this.spacesContainer.removeChildren().forEach((c) => c.destroy())
     this.textContainer.removeChildren().forEach((c) => c.destroy())
+    this.routesContainer.removeChildren().forEach((c) => c.destroy())
+    this.devicesContainer.removeChildren().forEach((c) => c.destroy())
+    this.legendContainer.removeChildren().forEach((c) => c.destroy())
     this.spaceLabels = []
     this.highlight.clear()
     this.spaceIndex.clear()

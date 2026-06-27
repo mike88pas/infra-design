@@ -18,13 +18,20 @@ let mainWindow: BrowserWindow | null = null
 let sidecar: SidecarBridge | null = null
 
 function sidecarScriptDir(): string {
-  // dev: <root>/sidecar/geometry ; prod: rozpakowane zasoby (dochodzi w F6 packaging)
+  // dev: <root>/sidecar/geometry (Python + server.py)
   return join(app.getAppPath(), 'sidecar', 'geometry')
 }
 
 function getSidecar(): SidecarBridge {
   if (!sidecar) {
-    sidecar = new SidecarBridge({ scriptDir: sidecarScriptDir(), allowedRoots: securityRoots() })
+    // Produkcja: samodzielny sidecar server.exe (PyInstaller) w extraResources/sidecar/.
+    // Dev: Python + server.py z drzewa repo.
+    const exePath = app.isPackaged ? join(process.resourcesPath, 'sidecar', 'server.exe') : undefined
+    sidecar = new SidecarBridge({
+      scriptDir: sidecarScriptDir(),
+      exePath,
+      allowedRoots: securityRoots()
+    })
   }
   return sidecar
 }
@@ -36,6 +43,11 @@ function createWindow(): void {
     show: false,
     backgroundColor: '#0b1220',
     title: 'Infra Design',
+    // Ikona okna/paska zadań. Prod: resources/icon.png z extraResources (process.resourcesPath);
+    // dev: z drzewa repo. Windows i tak użyje ikony .exe (electron-builder) dla skrótów/taskbara.
+    icon: app.isPackaged
+      ? join(process.resourcesPath, 'icon.png')
+      : join(app.getAppPath(), 'resources', 'icon.png'),
     webPreferences: {
       preload: join(__dirname, '../preload/index.js'),
       contextIsolation: true,
@@ -54,6 +66,20 @@ function createWindow(): void {
   mainWindow.webContents.on('will-navigate', (e) => e.preventDefault())
   mainWindow.webContents.setWindowOpenHandler(() => ({ action: 'deny' }))
   mainWindow.webContents.on('will-attach-webview', (e) => e.preventDefault())
+
+  // Obserwowalność tylko w trybie debug (INFRA_DEBUG): konsola renderera + crashe → stdout,
+  // oraz DevTools. Domyślnie cicho (produkcja).
+  if (process.env.INFRA_DEBUG) {
+    const levels = ['LOG', 'WARN', 'ERROR']
+    mainWindow.webContents.on('console-message', (_e, level, message, line, sourceId) => {
+      const src = (sourceId || '').split('/').pop()
+      console.log(`[renderer-console ${levels[level] ?? level}] ${message} (${src}:${line})`)
+    })
+    mainWindow.webContents.on('render-process-gone', (_e, details) => {
+      console.log(`[renderer-GONE] reason=${details.reason} exitCode=${details.exitCode}`)
+    })
+    mainWindow.webContents.openDevTools({ mode: 'detach' })
+  }
 
   const devUrl = process.env['ELECTRON_RENDERER_URL']
   if (devUrl) {
@@ -148,7 +174,7 @@ function registerIpc(): void {
   })
 
   // Import rzutu DXF (z dialogiem jeśli brak ścieżki) → DxfDocument.
-  ipcMain.handle('dxf:import', async (_e, filePath?: string) => {
+  ipcMain.handle('dxf:import', async (_e, filePath?: string, opts?: { maxRenderEntities?: number }) => {
     ensureUnlocked()
     let target = filePath
     if (!target) {
@@ -162,7 +188,7 @@ function registerIpc(): void {
       vouchPath(target) // plik wybrany przez użytkownika → zaufany
     }
     const roots = authorizeReadFile(target)
-    const doc = await getSidecar().importDxf(target, roots)
+    const doc = await getSidecar().importDxf(target, roots, opts?.maxRenderEntities)
     return { imported: true, filePath: target, doc }
   })
 
@@ -199,6 +225,25 @@ function registerIpc(): void {
     }
   )
 
+  // Wykaz pomieszczeń z TABELI „Zestawienie" + etykiet-numerów (DWG z PDF, bez warstw pól).
+  ipcMain.handle(
+    'dxf:extractRoomsSchedule',
+    async (
+      _e,
+      params: {
+        path: string
+        explodeBlocks?: boolean
+        scale?: number
+        headerName?: string
+        headerArea?: string
+      }
+    ) => {
+      ensureUnlocked()
+      const _allowedRoots = authorizeReadFile(params.path)
+      return getSidecar().extractRoomsSchedule({ ...params, _allowedRoots })
+    }
+  )
+
   // Eksport rysunku instalacji do DXF (z dialogiem zapisu).
   ipcMain.handle(
     'dxf:export',
@@ -216,6 +261,54 @@ function registerIpc(): void {
       return { exported: true, ...out }
     }
   )
+
+  // Eksport elewacji szaf 19" do DXF.
+  ipcMain.handle(
+    'rack:export',
+    async (
+      _e,
+      params: {
+        racks: Array<{ name: string; uHeight: number; units: Array<{ uPos: number; uSize: number; label: string }> }>
+        meta?: Record<string, string>
+      }
+    ) => {
+      ensureUnlocked()
+      const res = await dialog.showSaveDialog(mainWindow!, {
+        title: 'Eksportuj elewację szaf (DXF)',
+        defaultPath: 'Elewacja szaf.dxf',
+        filters: [{ name: 'DXF', extensions: ['dxf'] }]
+      })
+      if (res.canceled || !res.filePath) return { exported: false }
+      vouchPath(res.filePath)
+      const _allowedRoots = authorizeWriteFile(res.filePath)
+      const out = await getSidecar().exportRackElevation({
+        path: res.filePath,
+        racks: params.racks,
+        meta: params.meta ?? {},
+        _allowedRoots
+      })
+      return { exported: true, ...out }
+    }
+  )
+
+  // Eksport kosztorysu/zestawienia inwestorskiego do XLSX (format klienta).
+  ipcMain.handle('kosztorys:export', async (_e, params: { kosztorys: unknown; meta?: { project?: string } }) => {
+    ensureUnlocked()
+    const res = await dialog.showSaveDialog(mainWindow!, {
+      title: 'Eksportuj kosztorys inwestorski (XLSX)',
+      defaultPath: `Kosztorys inwestorski_${params.meta?.project || 'projekt'}.xlsx`,
+      filters: [{ name: 'Excel', extensions: ['xlsx'] }]
+    })
+    if (res.canceled || !res.filePath) return { exported: false }
+    vouchPath(res.filePath)
+    const _allowedRoots = authorizeWriteFile(res.filePath)
+    const out = await getSidecar().exportKosztorys({
+      path: res.filePath,
+      kosztorys: params.kosztorys,
+      _allowedRoots
+    })
+    return { exported: true, ...out }
+  })
 
   // Trasowanie kabli A* (urządzenia → szafy) → SidecarRouteResult.
   ipcMain.handle(

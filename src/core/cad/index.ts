@@ -7,7 +7,7 @@ import type { DetectedPolygon } from '@domain/model/schema'
 import type { RenderSpace } from './CadScene'
 
 export { CadScene } from './CadScene'
-export type { RenderSpace, CadSceneOptions } from './CadScene'
+export type { RenderSpace, RenderDevice, RenderRoute, CadSceneOptions } from './CadScene'
 
 /**
  * Mapuje surowe wieloboki z `polygonize` na renderowalne pomieszczenia,
