@@ -9,7 +9,7 @@
  */
 
 import { useMemo, useState } from 'react'
-import type { CableRoute, Device, DxfInsert, DxfRoom, DxfDocument, BBox } from '@domain/model/schema'
+import type { CableRoute, Device, DxfInsert, DxfRoom } from '@domain/model/schema'
 import { guessSystemMapping, type LayerSystemMap, type SystemTypeMapping } from '@domain/dxf/systemMapping'
 import { devicesFromInserts, countByTypeKey } from '@domain/installations/fromDxf'
 import { roomsToSpaces } from '@domain/dxf/rooms'
@@ -18,8 +18,6 @@ import { buildCost, PLN } from '@domain/installations/cost'
 import { runAudit } from '@domain/norms/audit'
 import { INSTALLATION_RULES } from '@domain/norms/rules'
 import type { ProjectBundle } from '@domain/model/schema'
-import { CadViewer } from '@core/cad/CadViewer'
-import type { RenderDevice } from '@core/cad'
 import clientData from './data/client-floor.json'
 
 interface ClientFloor {
@@ -64,45 +62,8 @@ const INSERT_COUNTS: Record<string, number> = (() => {
   return c
 })()
 
-// Minimalny „rzut" dla renderera CAD: ten plik klienta to ekstrakcja typu schedule
-// (etykiety pomieszczeń + metraż, bez geometrii ścian), więc rysujemy markery
-// pomieszczeń + symbole urządzeń na realnych pozycjach. bbox liczymy z punktów.
-const CLIENT_BBOX: BBox = (() => {
-  // Percentyl 2–98% obcina pojedyncze bloki-outliery (np. stray w origin 0,0),
-  // które inaczej rozciągają widok i ściskają realny klaster urządzeń.
-  const pts = [...data.inserts.map((i) => i.at), ...data.rooms.map((r) => r.at)]
-  if (!pts.length) return { minX: 0, minY: 0, maxX: 1000, maxY: 1000 }
-  const xs = pts.map((p) => p.x).sort((a, b) => a - b)
-  const ys = pts.map((p) => p.y).sort((a, b) => a - b)
-  const q = (arr: number[], t: number): number =>
-    arr[Math.min(arr.length - 1, Math.max(0, Math.floor(arr.length * t)))]
-  const minX = q(xs, 0.02)
-  const maxX = q(xs, 0.98)
-  const minY = q(ys, 0.02)
-  const maxY = q(ys, 0.98)
-  const mx = (maxX - minX) * 0.06 || 500
-  const my = (maxY - minY) * 0.06 || 500
-  return { minX: minX - mx, minY: minY - my, maxX: maxX + mx, maxY: maxY + my }
-})()
-
-const CLIENT_DOC: DxfDocument = {
-  layers: data.layers,
-  entities: [],
-  bbox: CLIENT_BBOX,
-  units: 'mm',
-  entityCount: 0
-}
-
-// Systemy do filtra na canvasie (kolor zgodny z legendą renderera).
-const SYSTEM_FILTER: { key: string; label: string; dot: string }[] = [
-  { key: 'lan', label: 'LAN', dot: '#38bdf8' },
-  { key: 'cctv', label: 'CCTV', dot: '#ef4444' },
-  { key: 'kd', label: 'KD', dot: '#a78bfa' }
-]
-
 export function ClientDemo(): JSX.Element {
   const [overrides, setOverrides] = useState<LayerSystemMap>({})
-  const [hidden, setHidden] = useState<Set<string>>(new Set())
 
   const mapping = useMemo<LayerSystemMap>(
     () => ({ ...guessSystemMapping(data.layers), ...overrides }),
@@ -150,30 +111,6 @@ export function ClientDemo(): JSX.Element {
     }
   }, [mapping])
 
-  // Symbole na rzut: urządzenia (po filtrze systemów) + markery pomieszczeń.
-  const renderDevices = useMemo<RenderDevice[]>(
-    () =>
-      result.devices
-        .filter((d) => !hidden.has(d.system))
-        .map((d) => ({
-          id: d.id,
-          system: d.system,
-          typeKey: d.typeKey,
-          position: d.position,
-          rotation: d.rotation
-        })),
-    [result.devices, hidden]
-  )
-
-  function toggleSystem(sys: string): void {
-    setHidden((h) => {
-      const next = new Set(h)
-      if (next.has(sys)) next.delete(sys)
-      else next.add(sys)
-      return next
-    })
-  }
-
   // Warstwy urządzeń (mają INSERT-y i rozpoznany/edytowalny system).
   const deviceLayers = data.layers
     .map((l) => l.name)
@@ -202,35 +139,6 @@ export function ClientDemo(): JSX.Element {
           warstw, urządzenia, BOM i kosztorys liczą się <strong>na żywo w przeglądarce</strong> tym
           samym kodem co aplikacja desktop. Zmień przypisanie warstwy — wszystko przeliczy się od razu.
         </p>
-
-        {/* Mini-rzut: urządzenia naniesione na realne pozycje (tym samym rendererem
-            CAD co desktop). Filtr systemów i zmiana mapowania przeliczają widok live. */}
-        <div className="demo-frame">
-          <div className="demo-bar">
-            <span>
-              rzut K+1 · <span className="pill">{renderDevices.length} symboli</span>{' '}
-              <span className="pill">{data.rooms.length} pomieszczeń</span>
-            </span>
-            <span className="sysfilter">
-              {SYSTEM_FILTER.map((s) => {
-                const n = result.devices.filter((d) => d.system === s.key).length
-                if (!n) return null
-                const off = hidden.has(s.key)
-                return (
-                  <button
-                    key={s.key}
-                    className={`sys${off ? ' off' : ''}`}
-                    onClick={() => toggleSystem(s.key)}
-                    title={off ? 'Pokaż' : 'Ukryj'}
-                  >
-                    <i style={{ background: s.dot }} /> {s.label} · {n}
-                  </button>
-                )
-              })}
-            </span>
-          </div>
-          <CadViewer doc={CLIENT_DOC} spaces={[]} devices={renderDevices} className="demo-canvas" />
-        </div>
 
         <div className="client-grid">
           {/* Mapowanie warstw (interaktywne) */}

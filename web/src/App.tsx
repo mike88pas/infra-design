@@ -1,18 +1,53 @@
 import { useMemo, useState } from 'react'
-import type { DxfDocument } from '@domain/model/schema'
+import type { DxfDocument, DxfRoom, Point } from '@domain/model/schema'
 import { CadViewer } from '@core/cad/CadViewer'
-import type { RenderSpace } from '@core/cad'
+import type { RenderSpace, RenderDevice } from '@core/cad'
 import { guessLayerRole } from '@domain/dxf/layerMapping'
+import { autoDesign } from '@domain/installations/autodesign'
 import sampleData from './data/sample-floor.json'
 import { ClientDemo } from './ClientDemo'
 
 const sample = sampleData as unknown as { doc: DxfDocument; spaces: RenderSpace[] }
 
-// Ukryj warstwy z opisami DXF — czyste etykiety (nazwa + m²) z renderera nie
-// dublują się wtedy z oryginalnym tekstem rzutu.
+// Pokazujemy czysty rzut: ściany + pomieszczenia + etykiety. Ukrywamy warstwy
+// z opisami DXF (dublują etykiety renderera) ORAZ łuki drzwi (DOORS) — dla widza
+// spoza CAD wyglądają jak przypadkowe zielone krzywe.
 const DEMO_LAYER_VIS: Record<string, boolean> = Object.fromEntries(
-  sample.doc.layers.map((l) => [l.name, guessLayerRole(l.name) !== 'text'])
+  sample.doc.layers.map((l) => [
+    l.name,
+    guessLayerRole(l.name) !== 'text' && !/door|drzwi/i.test(l.name)
+  ])
 )
+
+// Auto-projekt LAN+CCTV na rzucie demo — ta sama funkcja `autoDesign` co w aplikacji
+// desktop: z pomieszczeń generuje urządzenia wg reguł (1 gniazdo/10 m², AP, kamery).
+function centroid(poly: Point[]): Point {
+  const n = poly.length || 1
+  return { x: poly.reduce((s, p) => s + p.x, 0) / n, y: poly.reduce((s, p) => s + p.y, 0) / n }
+}
+const DEMO_ROOMS: DxfRoom[] = sample.spaces.map((s, i) => ({
+  number: String(i + 1),
+  name: s.name,
+  areaM2: s.area / 1_000_000,
+  at: centroid(s.polygon),
+  tag: s.polygon
+}))
+const DEMO_DEVICES: RenderDevice[] = autoDesign(DEMO_ROOMS, {
+  drawingId: 'demo',
+  spacing: 650,
+  rules: { cctv: { minRoomArea: 12, nameKeywords: [] }, ap: { minRoomArea: 18 } }
+}).devices.map((d) => ({
+  id: d.id,
+  system: d.system,
+  typeKey: d.typeKey,
+  position: d.position,
+  rotation: d.rotation
+}))
+
+const DEMO_SYS: { key: string; label: string; dot: string }[] = [
+  { key: 'lan', label: 'LAN', dot: '#38bdf8' },
+  { key: 'cctv', label: 'CCTV', dot: '#ef4444' }
+]
 
 const SYSTEMS = [
   { key: 'LAN', live: true },
@@ -37,10 +72,23 @@ const ROADMAP = [
 
 export function App(): JSX.Element {
   const [hovered, setHovered] = useState<RenderSpace | null>(null)
+  const [hiddenSys, setHiddenSys] = useState<Set<string>>(new Set())
   const totalArea = useMemo(
     () => sample.spaces.reduce((s, sp) => s + sp.area, 0) / 1_000_000,
     []
   )
+  const demoDevices = useMemo(
+    () => DEMO_DEVICES.filter((d) => !hiddenSys.has(d.system)),
+    [hiddenSys]
+  )
+  function toggleDemoSys(k: string): void {
+    setHiddenSys((h) => {
+      const n = new Set(h)
+      if (n.has(k)) n.delete(k)
+      else n.add(k)
+      return n
+    })
+  }
 
   return (
     <>
@@ -190,40 +238,56 @@ export function App(): JSX.Element {
 
       <section className="block" id="demo">
         <div className="wrap">
-          <h2 className="section-title">Interaktywne demo — wykrywanie pomieszczeń z rzutu</h2>
+          <h2 className="section-title">Interaktywne demo — auto-projekt LAN + CCTV na rzucie</h2>
           <p className="section-sub">
-            Poniższy rzut został wczytany z pliku DXF tym samym silnikiem, co w aplikacji desktop.
-            Pomieszczenia wykryto automatycznie z geometrii ścian. Przeciągaj, przybliżaj kółkiem,
+            Rzut wczytany z DXF tym samym silnikiem co aplikacja desktop; pomieszczenia wykryte
+            automatycznie. Urządzenia rozmieszczone funkcją <strong>auto-projekt</strong> wg reguł
+            (1 gniazdo / 10 m², kamera, Access Point). Filtruj systemy, przeciągaj, przybliżaj kółkiem,
             najedź na pomieszczenie.
           </p>
           <div className="demo-frame">
             <div className="demo-bar">
               <span>
-                sample-floor.dxf · <span className="pill">{sample.doc.entityCount} encji</span>{' '}
-                <span className="pill">{sample.spaces.length} pomieszczeń</span>{' '}
-                <span className="pill">{totalArea.toFixed(1)} m²</span>
-              </span>
-              <span>
-                {hovered ? (
-                  <strong style={{ color: 'var(--accent)' }}>
+                sample-floor.dxf · <span className="pill">{sample.spaces.length} pomieszczeń</span>{' '}
+                <span className="pill">{totalArea.toFixed(1)} m²</span>{' '}
+                <span className="pill">{demoDevices.length} urządzeń (auto)</span>
+                {hovered && (
+                  <strong style={{ color: 'var(--accent)', marginLeft: 8 }}>
                     {hovered.name} — {(hovered.area / 1_000_000).toFixed(1)} m²
                   </strong>
-                ) : (
-                  'najedź na pomieszczenie →'
                 )}
+              </span>
+              <span className="sysfilter">
+                {DEMO_SYS.map((s) => {
+                  const n = DEMO_DEVICES.filter((d) => d.system === s.key).length
+                  if (!n) return null
+                  const off = hiddenSys.has(s.key)
+                  return (
+                    <button
+                      key={s.key}
+                      className={`sys${off ? ' off' : ''}`}
+                      onClick={() => toggleDemoSys(s.key)}
+                      title={off ? 'Pokaż' : 'Ukryj'}
+                    >
+                      <i style={{ background: s.dot }} /> {s.label} · {n}
+                    </button>
+                  )
+                })}
               </span>
             </div>
             <CadViewer
               doc={sample.doc}
               spaces={sample.spaces}
+              devices={demoDevices}
               layerVisibility={DEMO_LAYER_VIS}
               onHoverSpace={setHovered}
               className="demo-canvas"
             />
           </div>
           <p className="demo-hint">
-            To wczesna wersja techniczna (renderer rdzenia CAD). W aplikacji desktop dochodzą:
-            naniesienie urządzeń, trasowanie, walidacja norm, BOM i kosztorys.
+            Auto-projekt to start („mieszany"): projektant koryguje rozmieszczenie, a wytyczne klienta
+            nadpisują reguły. W aplikacji desktop dochodzą: trasowanie A*, walidacja norm, BOM,
+            kosztorys i eksport DXF/XLSX.
           </p>
         </div>
       </section>
