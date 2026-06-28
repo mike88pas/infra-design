@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react'
 import type { DxfDocument, DxfRoom, Point } from '@domain/model/schema'
 import { CadViewer } from '@core/cad/CadViewer'
-import type { RenderSpace, RenderDevice } from '@core/cad'
+import type { RenderSpace, RenderDevice, RenderRoute } from '@core/cad'
 import { guessLayerRole } from '@domain/dxf/layerMapping'
 import { autoDesign } from '@domain/installations/autodesign'
 import sampleData from './data/sample-floor.json'
@@ -32,17 +32,28 @@ const DEMO_ROOMS: DxfRoom[] = sample.spaces.map((s, i) => ({
   at: centroid(s.polygon),
   tag: s.polygon
 }))
-const DEMO_DEVICES: RenderDevice[] = autoDesign(DEMO_ROOMS, {
+const DEMO_DESIGN = autoDesign(DEMO_ROOMS, {
   drawingId: 'demo',
   spacing: 650,
   rules: { cctv: { minRoomArea: 12, nameKeywords: [] }, ap: { minRoomArea: 18 } }
-}).devices.map((d) => ({
+})
+const DEMO_DEVICES: RenderDevice[] = DEMO_DESIGN.devices.map((d) => ({
   id: d.id,
   system: d.system,
   typeKey: d.typeKey,
   position: d.position,
   rotation: d.rotation
 }))
+// Trasy kablowe (home-run): każde urządzenie → szafa IDF (tu: SERWEROWNIA).
+// Ścieżka L-kształtna (poziom→pion) — czytelny obraz zbiegania okablowania do szafy.
+const DEMO_RACK = DEMO_DESIGN.cabinets[0]?.at
+const DEMO_ROUTES: RenderRoute[] = DEMO_RACK
+  ? DEMO_DESIGN.devices.map((d) => ({
+      id: `route-${d.id}`,
+      system: d.system,
+      path: [d.position, { x: DEMO_RACK.x, y: d.position.y }, DEMO_RACK]
+    }))
+  : []
 
 const DEMO_SYS: { key: string; label: string; dot: string }[] = [
   { key: 'lan', label: 'LAN', dot: '#38bdf8' },
@@ -79,6 +90,10 @@ export function App(): JSX.Element {
   )
   const demoDevices = useMemo(
     () => DEMO_DEVICES.filter((d) => !hiddenSys.has(d.system)),
+    [hiddenSys]
+  )
+  const demoRoutes = useMemo(
+    () => DEMO_ROUTES.filter((r) => !hiddenSys.has(r.system)),
     [hiddenSys]
   )
   function toggleDemoSys(k: string): void {
@@ -279,15 +294,17 @@ export function App(): JSX.Element {
               doc={sample.doc}
               spaces={sample.spaces}
               devices={demoDevices}
+              routes={demoRoutes}
               layerVisibility={DEMO_LAYER_VIS}
               onHoverSpace={setHovered}
               className="demo-canvas"
             />
           </div>
           <p className="demo-hint">
-            Auto-projekt to start („mieszany"): projektant koryguje rozmieszczenie, a wytyczne klienta
-            nadpisują reguły. W aplikacji desktop dochodzą: trasowanie A*, walidacja norm, BOM,
-            kosztorys i eksport DXF/XLSX.
+            Linie to trasy kablowe (home-run) zbiegające do szafy IDF w serwerowni — tu uproszczone;
+            w aplikacji desktop liczy je algorytm A* omijający ściany. Auto-projekt to start
+            („mieszany"): projektant koryguje rozmieszczenie, a wytyczne klienta nadpisują reguły.
+            Dalej: walidacja norm, BOM, kosztorys i eksport DXF/XLSX.
           </p>
         </div>
       </section>
