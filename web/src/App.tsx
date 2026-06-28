@@ -35,7 +35,12 @@ const DEMO_ROOMS: DxfRoom[] = sample.spaces.map((s, i) => ({
 const DEMO_DESIGN = autoDesign(DEMO_ROOMS, {
   drawingId: 'demo',
   spacing: 650,
-  rules: { cctv: { minRoomArea: 12, nameKeywords: [] }, ap: { minRoomArea: 18 } }
+  // Realistycznie: kamery tylko w pomieszczeniach wspólnych/wrażliwych (open space,
+  // sala konferencyjna, serwerownia) — NIE w prywatnych biurach. AP w większych salach.
+  rules: {
+    cctv: { minRoomArea: 999, nameKeywords: ['open', 'konf', 'sala', 'serwer'] },
+    ap: { minRoomArea: 18 }
+  }
 })
 const DEMO_DEVICES: RenderDevice[] = DEMO_DESIGN.devices.map((d) => ({
   id: d.id,
@@ -53,6 +58,10 @@ const DEMO_ROUTES: RenderRoute[] = DEMO_RACK
       system: d.system,
       path: [d.position, { x: DEMO_RACK.x, y: d.position.y }, DEMO_RACK]
     }))
+  : []
+// Marker szafy IDF w punkcie zbiegu tras (zawsze widoczny; szary kwadrat).
+const DEMO_RACK_MARK: RenderDevice[] = DEMO_RACK
+  ? [{ id: 'rack', system: 'rack', typeKey: 'rack.idf', position: DEMO_RACK, rotation: 0 }]
   : []
 
 const DEMO_SYS: { key: string; label: string; dot: string }[] = [
@@ -293,7 +302,7 @@ export function App(): JSX.Element {
             <CadViewer
               doc={sample.doc}
               spaces={sample.spaces}
-              devices={demoDevices}
+              devices={[...demoDevices, ...DEMO_RACK_MARK]}
               routes={demoRoutes}
               layerVisibility={DEMO_LAYER_VIS}
               onHoverSpace={setHovered}
