@@ -1,0 +1,9 @@
+{
+  "hosting": {
+    "public": "web/redirect",
+    "ignore": ["firebase.json", "**/.*", "**/node_modules/**"],
+    "redirects": [
+      { "source": "**", "destination": "https://infra-design-app.web.app", "type": 301 }
+    ]
+  }
+}
