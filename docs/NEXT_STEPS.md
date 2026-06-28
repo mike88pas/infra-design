@@ -41,7 +41,8 @@ Ten plik = punkt startu dla osoby/instancji przejmującej projekt. Czytaj w kole
 - **Debug**: instrumentacja (timing sidecara, konsola renderera, DevTools) za flagą `INFRA_DEBUG=1`.
 
 ## Kosztorys inwestorski (XLSX) + elewacja szaf (faza „działająca wersja")
-Na bazie realnych projektów SOS klienta (HOTEL/TEATR/ZAKŁAD — kosztorysy Fibrain/Alcatel,
+Na bazie realnych projektów SOS klienta (różne typy obiektów: użyteczności publicznej /
+hotelowe / przemysłowe — kosztorysy Fibrain/Alcatel,
 rysunki „Widok szaf"). Pliki referencyjne **poza repo**: `~/Documents/InfraDesign/_reference/`
 (NDA — w repo tylko generyczny katalog: SKU+nazwa+cena+kategoria).
 - **Realny katalog** (`src/domain/installations/catalog.ts`): `CatalogEntry` ma `category`
@@ -92,7 +93,7 @@ Sanity check: w aplikacji „Test sidecara (ping)" → powinno pokazać `ezdxf x
 Klient przysłał rzut + wytyczne (LAN+CCTV, reguły mieszane, rezultat: Rysunki PW + BOM + kosztorys).
 Tor pracy w aplikacji desktop:
 1. **Plik klienta zostaje lokalnie** — skopiuj DXF/DWG do katalogu projektu (np. `~/Documents/InfraDesign/`).
-   DWG → DXF: ODA File Converter (`ACAD2018`/`DXF`); patrz `[[client-file-teatr-rzeszow]]` w pamięci.
+   DWG → DXF: ODA File Converter (`ACAD2018`/`DXF`); szczegóły w pamięci projektu (plik klienta referencyjnego).
 2. **Import** → „Importuj projekt + instalacje (kreator)" → wybierz tryb:
    - **autodesign** („od zera"): z wykazu pomieszczeń stawia urządzenia wg reguł (1 gniazdo/10 m²,
      AP≥30 m², kamera≥40 m²), reguły nadpisywalne wytycznymi klienta;
@@ -157,6 +158,6 @@ SAP, DSO, BMS) z typami urządzeń, normami, kalkulatorami i schematami: `docs/S
 - Pliki klienta trzymaj poza repo (np. `~/Documents/InfraDesign/`), nie w drzewie projektu.
 
 ## Potrzebne od klienta
-- ✅ Realny DXF (Teatr Rzeszów) — był; teraz drugi projekt **do zaprojektowania od zera**.
+- ✅ Realny DXF (klient referencyjny) — był; teraz drugi projekt **do zaprojektowania od zera**.
 - Przykładowy **plik kosztorysu ATH** (reverse-engineering eksportu) + program (Norma/Zuzia/Rodos).
 - Potwierdzenie **katalogów/producentów** (mamy realne ceny Fibrain/Ubiquiti/Hikvision/ZPAS).

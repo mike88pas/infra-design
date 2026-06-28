@@ -1,5 +1,6 @@
 /**
- * Demo na REALNYM rzucie klienta (Teatr Rzeszów, K+1).
+ * Demo na REALNYM (zanonimizowanym) rzucie klienta referencyjnego — obiekt
+ * użyteczności publicznej, K+1.
  *
  * Sidecar (Python) nie działa w przeglądarce — dane (warstwy, pomieszczenia, INSERT-y,
  * trasy) są „upieczone" do client-floor.json. Ale CAŁY pipeline F2 liczy się TUTAJ,

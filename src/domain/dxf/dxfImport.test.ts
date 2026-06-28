@@ -4,7 +4,7 @@ import { classifyLayer, guessSystemMapping } from './systemMapping'
 import { buildDefaultProfile, guessLevel } from './importProfile'
 import { devicesFromInserts, countByTypeKey } from '@domain/installations/fromDxf'
 
-// Warstwy jak w realnym pliku klienta (Teatr Rzeszów, konwencja PST_*).
+// Warstwy jak w realnym pliku klienta referencyjnego (konwencja PST_*).
 const CLIENT_LAYERS: DxfLayer[] = [
   'PST_gniazda_RJ-45',
   'PST_gniazda AP',
@@ -69,7 +69,7 @@ describe('buildDefaultProfile — wartości początkowe', () => {
     layers: CLIENT_LAYERS,
     units: 'mm',
     fileName: 'PW-IT-02-012_K+1_LAN.dxf',
-    projectName: 'Teatr Rzeszów',
+    projectName: 'Obiekt referencyjny',
     client: 'Fibrain'
   })
 

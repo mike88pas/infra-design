@@ -3,7 +3,7 @@
  *
  * Symbole urządzeń w projektach wykonawczych to często bloki anonimowe (*U34),
  * więc klasyfikacja idzie po NAZWIE WARSTWY. Konwencje biur bywają różne; tu
- * heurystyka pokrywa popularny układ `PST_*` (np. Teatr Rzeszów) + warianty
+ * heurystyka pokrywa popularny układ `PST_*` (biura niskoprądowe) + warianty
  * polsko/angielskie. To PODPOWIEDŹ — projektant potwierdza/poprawia w kreatorze importu.
  *
  * Wynik per warstwa:

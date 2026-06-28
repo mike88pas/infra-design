@@ -15,7 +15,7 @@ ROOT = Path(__file__).resolve().parents[1]
 FIXTURE = ROOT / "tests" / "fixtures" / "sample-floor.dxf"
 OUT = ROOT / "web" / "src" / "data" / "sample-floor.json"
 
-# Realny rzut klienta (Teatr Rzeszów, K+1) — opcjonalny (plik spoza repo).
+# Realny rzut klienta referencyjnego (K+1) — opcjonalny (plik spoza repo).
 # Wynik (client-floor.json) jest commitowany, więc demo nie potrzebuje DXF-a w runtime.
 import os
 
@@ -134,7 +134,7 @@ def bake_client(server, anonymize=True):
             if "$0$" in l["name"]:
                 l["name"] = "PODKŁAD$0$" + l["name"].rsplit("$0$", 1)[-1]
     else:
-        meta_name = "Teatr w Rzeszowie — kondygnacja K+1 (parter)"
+        meta_name = "Obiekt użyteczności publicznej — kondygnacja K+1 (parter)"
 
     payload = {
         "meta": {"name": meta_name, "level": 1, "units": doc["units"], "unitMm": 1, "anonymized": anonymize},
@@ -144,12 +144,18 @@ def bake_client(server, anonymize=True):
         "cableRoutes": cable_routes,
         "cableTotalM": round(sum(c["lengthM"] for c in cable_routes), 1),
     }
-    # Bezpiecznik końcowy (NDA): odmów zapisu, jeśli w payloadzie zostały tokeny klienta.
+    # Bezpiecznik końcowy (NDA): odmów zapisu, jeśli payload nie jest oznaczony jako
+    # zanonimizowany, albo zawiera któryś token klienta z denylisty. Denylistę trzymamy
+    # POZA repo (zmienna INFRA_NDA_TOKENS="token1,token2,..."), by nazwy klientów nie
+    # trafiały do kodu źródłowego. Strukturalny strażnik (anonymized==True) działa zawsze.
+    deny = [t.strip().lower() for t in os.environ.get("INFRA_NDA_TOKENS", "").split(",") if t.strip()]
     raw = json.dumps(payload, ensure_ascii=False)
     low = raw.lower()
-    hits = [t for t in ("teatr", "rzesz", "2203-ar") if t in low]
+    hits = sum(1 for t in deny if t in low)
     if hits or payload["meta"].get("anonymized") is not True:
-        raise SystemExit(f"bake_client: wykryto dane klienta {hits} — przerwano (NDA).")
+        raise SystemExit(
+            f"bake_client: zatrzymano (NDA) — anonymized={payload['meta'].get('anonymized')}, denylist_hits={hits}."
+        )
     CLIENT_OUT.write_text(raw, encoding="utf-8")
     print(f"Zapisano {CLIENT_OUT}")
     print(f"  warstw={len(layers)} rooms={rooms['count']} inserts={dev['count']} cable_m={payload['cableTotalM']:.0f}")
