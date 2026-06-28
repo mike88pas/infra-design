@@ -1,0 +1,25 @@
+# Wygenerowane: pip freeze z sidecar/.venv (pinning deps dla powtarzalnego buildu sidecara).
+# Runtime sidecara: ezdxf, shapely, openpyxl (+ ich zależności: numpy, et_xmlfile, pyparsing,
+# fonttools, typing_extensions). Reszta to narzędzia buildu/testów (pyinstaller, pytest).
+# Odtworzenie: python -m venv sidecar/.venv && sidecar/.venv/Scripts/pip install -r sidecar/requirements.lock
+altgraph==0.17.5
+colorama==0.4.6
+et_xmlfile==2.0.0
+ezdxf==1.4.4
+fonttools==4.63.0
+iniconfig==2.3.0
+numpy==2.4.6
+openpyxl==3.1.5
+packaging==26.2
+pefile==2024.8.26
+pluggy==1.6.0
+Pygments==2.20.0
+pyinstaller==6.21.0
+pyinstaller-hooks-contrib==2026.6
+pyparsing==3.3.2
+pytest==9.1.1
+pywin32-ctypes==0.2.3
+setuptools==82.0.1
+shapely==2.1.2
+typing_extensions==4.15.0
+xlrd==2.0.2

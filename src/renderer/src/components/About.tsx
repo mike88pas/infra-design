@@ -1,7 +1,7 @@
 /** Modal „O programie" — tożsamość produktu i autora (The Best Agency). */
 import { Logo } from './Logo'
 
-const APP_VERSION = '0.1.0'
+const APP_VERSION = '1.0.0'
 const YEAR = 2026
 
 export function About({ open, onClose }: { open: boolean; onClose: () => void }): JSX.Element | null {
