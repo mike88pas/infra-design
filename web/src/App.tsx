@@ -50,6 +50,7 @@ export function App(): JSX.Element {
             Infra<span>Design</span>
           </div>
           <div className="nav-links">
+            <a href="#o-projekcie">O projekcie</a>
             <a href="#problem">Problem</a>
             <a href="#jak">Jak działa</a>
             <a href="#demo">Demo</a>
@@ -64,7 +65,7 @@ export function App(): JSX.Element {
 
       <header className="hero">
         <div className="wrap">
-          <span className="eyebrow">Technical preview · Pilot: LAN + CCTV</span>
+          <span className="eyebrow">Pilot 1.0 · LAN + CCTV · aplikacja desktop (Windows)</span>
           <h1>
             Od rzutu <span className="grad">DXF</span> do gotowej oferty
             <br /> instalacji budynkowych
@@ -84,6 +85,53 @@ export function App(): JSX.Element {
           </div>
         </div>
       </header>
+
+      <section className="block" id="o-projekcie">
+        <div className="wrap">
+          <h2 className="section-title">O przedsięwzięciu</h2>
+          <p className="section-sub">
+            Infra Design to desktopowy system CAD nowej generacji do projektowania instalacji
+            niskoprądowych i elektrycznych w budynkach (LAN, CCTV, SSWiN, KD, PPOŻ/SAP, DSO, trasy,
+            automatyka). Wczytuje rzut DXF/DWG i — w oparciu o reguły inżynierskie oraz realne normy
+            (PN-EN 50173) — automatycznie rozmieszcza urządzenia, trasuje kable algorytmem A*,
+            generuje BOM, kosztorys inwestorski i elewacje szaf 19". Dokumenty eksportuje w formatach
+            branżowych (DXF, XLSX, elewacje rack), a katalog produktów jest realny (Fibrain,
+            Alcatel-Lucent, Hikvision, ZPAS) z aktualnymi cenami — więc wyceny są wiarygodne od
+            pierwszego dnia.
+          </p>
+          <div className="grid">
+            <div className="card">
+              <div className="ico">⚡</div>
+              <h3>Z dni do godzin</h3>
+              <p>
+                Jedno narzędzie zamiast AutoCAD-a, Excela i programu kosztorysowego. Wspólny model
+                danych spina rysunek, instalacje, normy i kosztorys.
+              </p>
+            </div>
+            <div className="card">
+              <div className="ico">🔒</div>
+              <h3>Lokalnie i bezpiecznie</h3>
+              <p>
+                Poufne rzuty nie opuszczają komputera. Projekty szyfrowane at-rest (AES-256-GCM) za
+                bramą hasła; renderer izolowany wg najlepszych praktyk.
+              </p>
+            </div>
+            <div className="card">
+              <div className="ico">🧱</div>
+              <h3>Generyczny rdzeń, wertykały</h3>
+              <p>
+                Rdzeń CAD jest pluginowy — instalacje to pierwsza wertykała. Droga rozwoju: desktop →
+                SaaS → iPad; w planie wnętrza i architektura.
+              </p>
+            </div>
+          </div>
+          <p className="demo-hint" style={{ marginTop: '1.25rem' }}>
+            Status: pilot MVP (LAN + CCTV) gotowy i zwalidowany na realnych, zanonimizowanych
+            projektach — dostępny jako instalator Windows oraz interaktywne demo poniżej. Software
+            wspomaga projektanta z uprawnieniami (PIIB), nie zastępując jego podpisu.
+          </p>
+        </div>
+      </section>
 
       <section className="block" id="problem">
         <div className="wrap">
@@ -243,7 +291,7 @@ export function App(): JSX.Element {
 
       <footer>
         <div className="wrap">
-          Infra Design · technical preview {new Date().getFullYear()} · The Best Agency
+          Infra Design · Pilot 1.0 · {new Date().getFullYear()} · The Best Agency
         </div>
       </footer>
     </>

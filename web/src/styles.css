@@ -309,6 +309,38 @@ footer {
   text-align: center;
 }
 
+/* filtr systemów na mini-rzucie */
+.sysfilter {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.sysfilter .sys {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  border: 1px solid var(--line);
+  background: var(--panel);
+  color: var(--text);
+  border-radius: 999px;
+  padding: 5px 12px;
+  font-size: 12px;
+  cursor: pointer;
+  transition: opacity 0.12s ease, filter 0.12s ease;
+}
+.sysfilter .sys:hover {
+  filter: brightness(1.12);
+}
+.sysfilter .sys.off {
+  opacity: 0.4;
+}
+.sysfilter .sys i {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  display: inline-block;
+}
+
 /* ── Demo realnego projektu klienta ───────────────────────────────────────── */
 .client-grid {
   display: grid;
