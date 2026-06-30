@@ -4,7 +4,8 @@ import { CadViewer } from '@core/cad/CadViewer'
 import type { RenderSpace, RenderDevice, RenderRoute } from '@core/cad'
 import { guessLayerRole } from '@domain/dxf/layerMapping'
 import { autoDesign } from '@domain/installations/autodesign'
-import sampleData from './data/sample-floor.json'
+import { GridRouter, type Segment } from '@core/pathfinding/gridRoute'
+import sampleData from './data/demo-floor.json'
 import { ClientDemo } from './ClientDemo'
 
 const sample = sampleData as unknown as { doc: DxfDocument; spaces: RenderSpace[] }
@@ -52,11 +53,20 @@ const DEMO_DEVICES: RenderDevice[] = DEMO_DESIGN.devices.map((d) => ({
 // Trasy kablowe (home-run): każde urządzenie → szafa IDF (tu: SERWEROWNIA).
 // Ścieżka L-kształtna (poziom→pion) — czytelny obraz zbiegania okablowania do szafy.
 const DEMO_RACK = DEMO_DESIGN.cabinets[0]?.at
-const DEMO_ROUTES: RenderRoute[] = DEMO_RACK
+// Ściany rzutu → segmenty dla routera A* (linie na warstwie WALLS).
+const WALL_SEGMENTS: Segment[] = (
+  sample.doc.entities as Array<{ t: string; a?: Point; b?: Point }>
+)
+  .filter((e) => e.t === 'line' && e.a && e.b)
+  .map((e) => ({ a: e.a as Point, b: e.b as Point }))
+// Trasy kablowe liczone A* (Dijkstra na siatce) — ten sam algorytm co sidecar, w przeglądarce.
+// Każde urządzenie → szafa IDF, omijając ściany, przez drzwi; kąty proste (ortogonalne).
+const DEMO_ROUTER = DEMO_RACK ? new GridRouter(sample.doc.bbox, WALL_SEGMENTS, [DEMO_RACK], { inflate: 1 }) : null
+const DEMO_ROUTES: RenderRoute[] = DEMO_ROUTER
   ? DEMO_DESIGN.devices.map((d) => ({
       id: `route-${d.id}`,
       system: d.system,
-      path: [d.position, { x: DEMO_RACK.x, y: d.position.y }, DEMO_RACK]
+      path: DEMO_ROUTER.routeFrom(d.position).path
     }))
   : []
 // Marker szafy IDF w punkcie zbiegu tras (zawsze widoczny; szary kwadrat).
@@ -310,8 +320,9 @@ export function App(): JSX.Element {
             />
           </div>
           <p className="demo-hint">
-            Linie to trasy kablowe (home-run) zbiegające do szafy IDF w serwerowni — tu uproszczone;
-            w aplikacji desktop liczy je algorytm A* omijający ściany. Auto-projekt to start
+            Linie to trasy kablowe liczone <strong>algorytmem A* w przeglądarce</strong> — omijają
+            ściany i biegną przez drzwi do szafy IDF w serwerowni, pod kątem prostym (jak koryta
+            kablowe). Ten sam algorytm trasowania co w aplikacji desktop. Auto-projekt to start
             („mieszany"): projektant koryguje rozmieszczenie, a wytyczne klienta nadpisują reguły.
             Dalej: walidacja norm, BOM, kosztorys i eksport DXF/XLSX.
           </p>
