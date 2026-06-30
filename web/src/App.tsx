@@ -62,16 +62,20 @@ const WALL_SEGMENTS: Segment[] = (
 // Trasy kablowe liczone A* (Dijkstra na siatce) — ten sam algorytm co sidecar, w przeglądarce.
 // Każde urządzenie → szafa IDF, omijając ściany, przez drzwi; kąty proste (ortogonalne).
 const DEMO_ROUTER = DEMO_RACK ? new GridRouter(sample.doc.bbox, WALL_SEGMENTS, [DEMO_RACK], { inflate: 1 }) : null
+
+// Trasy ortogonalne A* — wspólny pion w korytarzu (realistyczny trunk/riser) jest OK i
+// gwarantuje zero przecięć ze ścianami (test). Rozsuw geometryczny świadomie pominięty:
+// przy drzwiach tworzył ukośne odcinki mogące przeciąć mur.
 const DEMO_ROUTES: RenderRoute[] = DEMO_ROUTER
   ? DEMO_DESIGN.devices.map((d) => ({
       id: `route-${d.id}`,
       system: d.system,
-      path: DEMO_ROUTER.routeFrom(d.position).path
+      path: DEMO_ROUTER!.routeFrom(d.position).path
     }))
   : []
 // Marker szafy IDF w punkcie zbiegu tras (zawsze widoczny; szary kwadrat).
 const DEMO_RACK_MARK: RenderDevice[] = DEMO_RACK
-  ? [{ id: 'rack', system: 'rack', typeKey: 'rack.idf', position: DEMO_RACK, rotation: 0 }]
+  ? [{ id: 'rack', system: 'rack', typeKey: 'rack.idf', position: DEMO_RACK, rotation: 0, label: 'IDF' }]
   : []
 
 const DEMO_SYS: { key: string; label: string; dot: string }[] = [

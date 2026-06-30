@@ -40,6 +40,8 @@ export interface RenderDevice {
   typeKey: string
   position: Point
   rotation: number
+  /** Opcjonalny podpis nad symbolem (np. „IDF" przy szafie). */
+  label?: string
 }
 
 /** Trasa kablowa do narysowania (polilinia). */
@@ -74,6 +76,7 @@ export class CadScene {
   private textContainer = new Container()
   private spacesContainer = new Container()
   private spaceLabels: Text[] = []
+  private deviceLabels: Text[] = []
   private routesContainer = new Container() // trasy kablowe (pod urządzeniami)
   private devicesContainer = new Container() // symbole urządzeń (nad podkładem)
   private legendContainer = new Container() // legenda (stały rozmiar ekranowy)
@@ -235,6 +238,17 @@ export class CadScene {
       }
       g.fill({ color, alpha: 0.25 }).stroke({ width: lw * 1.2, color })
       this.devicesContainer.addChild(g)
+
+      if (d.label) {
+        const t = new Text({
+          text: d.label,
+          style: { fontFamily: 'sans-serif', fontSize: 11, fontWeight: '600', fill: 0xf1f5f9, align: 'center' }
+        })
+        t.anchor.set(0.5)
+        t.position.set(x, y + ds * 2.6)
+        this.deviceLabels.push(t)
+        this.devicesContainer.addChild(t)
+      }
     }
 
     this.buildLegend(devices)
@@ -478,9 +492,10 @@ export class CadScene {
     this.world.position.set(this.tx, this.ty)
     this.world.scale.set(this.scale, -this.scale)
 
-    // Etykiety pomieszczeń: stały rozmiar ekranowy (kompensacja skali świata).
+    // Etykiety pomieszczeń/urządzeń: stały rozmiar ekranowy (kompensacja skali świata).
     const k = 1 / this.scale
     for (const lbl of this.spaceLabels) lbl.scale.set(k, -k)
+    for (const lbl of this.deviceLabels) lbl.scale.set(k, -k)
 
     // LOD: ukryj tekst DXF gdy zbyt drobny by go czytać.
     for (const [key, c] of this.layerContainers) {
@@ -501,6 +516,7 @@ export class CadScene {
     this.devicesContainer.removeChildren().forEach((c) => c.destroy())
     this.legendContainer.removeChildren().forEach((c) => c.destroy())
     this.spaceLabels = []
+    this.deviceLabels = []
     this.highlight.clear()
     this.spaceIndex.clear()
     this.hovered = null

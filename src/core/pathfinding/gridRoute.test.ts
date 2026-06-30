@@ -133,7 +133,10 @@ describe('GridRouter — integracja na demo-floor.json', () => {
     const design = autoDesign(rooms, {
       drawingId: 'demo',
       spacing: 650,
-      rules: { cctv: { minRoomArea: 999, nameKeywords: ['open', 'konf', 'sala', 'serwer'] }, ap: { minRoomArea: 18 } }
+      rules: {
+        cctv: { minRoomArea: 999, nameKeywords: ['open', 'konf', 'sala', 'serwer'] },
+        ap: { m2PerAp: 100, minRoomArea: 18 }
+      }
     })
     const seed = design.cabinets[0].at
     const router = new GridRouter(floor.doc.bbox, walls, [seed], { inflate: 1 })

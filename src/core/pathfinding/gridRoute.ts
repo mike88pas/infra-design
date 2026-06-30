@@ -198,6 +198,21 @@ export class GridRouter {
     }
   }
 
+  /** Czy punkt (i otoczka `margin` komórek) jest wolny — do bezpiecznego rozsuwu tras. */
+  isFree(p: Point, margin = 0): boolean {
+    const cx = this.cellX(p.x)
+    const cy = this.cellY(p.y)
+    for (let dx = -margin; dx <= margin; dx++) {
+      for (let dy = -margin; dy <= margin; dy++) {
+        const nx = cx + dx
+        const ny = cy + dy
+        if (nx < 0 || nx >= this.w || ny < 0 || ny >= this.h) return false
+        if (this.blocked[this.idxOf(nx, ny)]) return false
+      }
+    }
+    return true
+  }
+
   /** Najbliższa wolna komórka (BFS w kwadratach r=1..maxR), gdy źródło pada na ścianę. */
   private nearestFree(cx: number, cy: number, maxR = 8): number {
     if (cx >= 0 && cx < this.w && cy >= 0 && cy < this.h && !this.blocked[this.idxOf(cx, cy)]) {
