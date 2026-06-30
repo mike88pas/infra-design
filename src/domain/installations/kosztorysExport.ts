@@ -5,7 +5,7 @@
  * arkuszy Kosztorys (Lp|Towar|Ilość|Cena|Waluta|Netto|Brutto|Nazwa) i Zestawienie
  * (Lp|Towar|Ilość|J.M|Nazwa) per kategoria + zbiorczy CAŁOŚĆ. Sidecar (openpyxl) tylko zapisuje.
  *
- * Dwa kroki modelowania, oba oparte o realne kosztorysy klienta (Fibrain/Alcatel):
+ * Dwa kroki modelowania, oba oparte o realne kosztorysy referencyjne:
  *  1. DEKOMPOZYCJA — każde „logiczne" urządzenie z BOM rozkładamy na realne SKU
  *     (`CatalogEntry.components`): gniazdo → puszka+suport+ramka+moduły+adapter itd.
  *  2. INFRASTRUKTURA — z liczby portów LAN dopełniamy część bierną i czynną szafy:

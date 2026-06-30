@@ -181,9 +181,8 @@ export function App(): JSX.Element {
             automatyka). Wczytuje rzut DXF/DWG i — w oparciu o reguły inżynierskie oraz realne normy
             (PN-EN 50173) — automatycznie rozmieszcza urządzenia, trasuje kable algorytmem A*,
             generuje BOM, kosztorys inwestorski i elewacje szaf 19". Dokumenty eksportuje w formatach
-            branżowych (DXF, XLSX, elewacje rack), a katalog produktów jest realny (Fibrain,
-            Alcatel-Lucent, Hikvision, ZPAS) z aktualnymi cenami — więc wyceny są wiarygodne od
-            pierwszego dnia.
+            branżowych (DXF, XLSX, elewacje rack), a kosztorys opiera się na realnym katalogu produktów
+            i aktualnych cenach rynkowych — to wyceny gotowe pod ofertę, a nie zgrubne szacunki.
           </p>
           <div className="grid">
             <div className="card">

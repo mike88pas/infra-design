@@ -70,7 +70,7 @@ describe('buildDefaultProfile — wartości początkowe', () => {
     units: 'mm',
     fileName: 'PW-IT-02-012_K+1_LAN.dxf',
     projectName: 'Obiekt referencyjny',
-    client: 'Fibrain'
+    client: 'Wykonawca referencyjny'
   })
 
   it('ustawia skalę, poziom, ściany, eksplozję i narzuty', () => {
