@@ -282,7 +282,7 @@ export function App(): JSX.Element {
           <div className="demo-frame">
             <div className="demo-bar">
               <span>
-                sample-floor.dxf · <span className="pill">{sample.spaces.length} pomieszczeń</span>{' '}
+                biuro-demo.dxf · <span className="pill">{sample.spaces.length} pomieszczeń</span>{' '}
                 <span className="pill">{totalArea.toFixed(1)} m²</span>{' '}
                 <span className="pill">{demoDevices.length} urządzeń (auto)</span>
                 {hovered && (
