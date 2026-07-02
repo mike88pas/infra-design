@@ -1,9 +1,11 @@
 import { useMemo, useState } from 'react'
-import type { DxfDocument, DxfRoom, Point } from '@domain/model/schema'
+import type { CableRoute, DxfDocument, DxfRoom, Point } from '@domain/model/schema'
 import { CadViewer } from '@core/cad/CadViewer'
-import type { RenderSpace, RenderDevice, RenderRoute } from '@core/cad'
+import { coverageForDevices, traysToRender } from '@core/cad'
+import type { RenderSpace, RenderDevice, RenderRoute, RenderExtras, SheetInfo } from '@core/cad'
 import { guessLayerRole } from '@domain/dxf/layerMapping'
 import { autoDesign } from '@domain/installations/autodesign'
+import { deriveTrays } from '@domain/installations/trays'
 import { GridRouter, type Segment } from '@core/pathfinding/gridRoute'
 import sampleData from './data/demo-floor.json'
 import { ClientDemo } from './ClientDemo'
@@ -78,9 +80,31 @@ const DEMO_RACK_MARK: RenderDevice[] = DEMO_RACK
   ? [{ id: 'rack', system: 'rack', typeKey: 'rack.idf', position: DEMO_RACK, rotation: 0, label: 'IDF' }]
   : []
 
+// Strefy pokrycia kamer DORI (PN-EN 62676-4) — ta sama domena co desktop (F4).
+// Kierunek każdej kamery: na centroid jej pomieszczenia; sektor przycięty do obrysu.
+const DEMO_COVERAGE = coverageForDevices(DEMO_DESIGN.devices, DEMO_DESIGN.spaces, 1)
+
+// Koryta kablowe (magistrale): backbone z tras — wspólne odcinki ≥2 kabli, jak w desktopie.
+// deriveTrays czyta tylko `path` z tras; rzut demo jest w mm (unitMm=1).
+const DEMO_TRAYS = traysToRender(
+  deriveTrays(DEMO_ROUTES as unknown as CableRoute[], 1, { drawingId: 'demo' }),
+  () => 1
+)
+
+// Metryczka rysunku — stała referencja (inline obiekt przeładowywałby scenę co render).
+const DEMO_SHEET: SheetInfo = {
+  projectName: 'Biuro — projekt demonstracyjny',
+  drawingName: 'Instalacje LAN + CCTV — parter',
+  client: 'Inwestor demonstracyjny',
+  level: 0,
+  scaleText: '1:100'
+}
+
 const DEMO_SYS: { key: string; label: string; dot: string }[] = [
   { key: 'lan', label: 'LAN', dot: '#38bdf8' },
-  { key: 'cctv', label: 'CCTV', dot: '#ef4444' }
+  { key: 'cctv', label: 'CCTV', dot: '#ef4444' },
+  { key: 'coverage', label: 'Pokrycie DORI', dot: '#f97316' },
+  { key: 'tray', label: 'Koryta', dot: '#64748b' }
 ]
 
 const SYSTEMS = [
@@ -100,7 +124,7 @@ const ROADMAP = [
   { ph: 'F1', t: 'Import DXF, renderer rzutu, wykrywanie pomieszczeń', done: true },
   { ph: 'F2', t: 'Plugin LAN: import urządzeń z rzutu, trasy A*, długości, BOM', done: true },
   { ph: 'F3', t: 'Kosztorys (KNR + cennik), eksport PDF/XLS/Word — PILOT', done: false },
-  { ph: 'F4', t: 'CCTV (FOV/DORI), auto-routing, widok szafy rack', done: false },
+  { ph: 'F4', t: 'CCTV (FOV/DORI), auto-routing, widok szafy rack', done: true },
   { ph: 'F5', t: 'Walidacja norm (PN-EN) z odnośnikami', done: false }
 ]
 
@@ -117,6 +141,14 @@ export function App(): JSX.Element {
   )
   const demoRoutes = useMemo(
     () => DEMO_ROUTES.filter((r) => !hiddenSys.has(r.system)),
+    [hiddenSys]
+  )
+  // Pokrycie DORI gaśnie też przy ukryciu CCTV (strefy bez kamer nie mają sensu).
+  const demoExtras = useMemo<RenderExtras>(
+    () => ({
+      coverage: hiddenSys.has('coverage') || hiddenSys.has('cctv') ? [] : DEMO_COVERAGE,
+      trays: hiddenSys.has('tray') ? [] : DEMO_TRAYS
+    }),
     [hiddenSys]
   )
   function toggleDemoSys(k: string): void {
@@ -296,7 +328,12 @@ export function App(): JSX.Element {
               </span>
               <span className="sysfilter">
                 {DEMO_SYS.map((s) => {
-                  const n = DEMO_DEVICES.filter((d) => d.system === s.key).length
+                  const n =
+                    s.key === 'coverage'
+                      ? DEMO_COVERAGE.length
+                      : s.key === 'tray'
+                        ? DEMO_TRAYS.length
+                        : DEMO_DEVICES.filter((d) => d.system === s.key).length
                   if (!n) return null
                   const off = hiddenSys.has(s.key)
                   return (
@@ -317,6 +354,8 @@ export function App(): JSX.Element {
               spaces={sample.spaces}
               devices={[...demoDevices, ...DEMO_RACK_MARK]}
               routes={demoRoutes}
+              sheet={DEMO_SHEET}
+              extras={demoExtras}
               layerVisibility={DEMO_LAYER_VIS}
               onHoverSpace={setHovered}
               className="demo-canvas"
@@ -324,10 +363,12 @@ export function App(): JSX.Element {
           </div>
           <p className="demo-hint">
             Linie to trasy kablowe liczone <strong>algorytmem A* w przeglądarce</strong> — omijają
-            ściany i biegną przez drzwi do szafy IDF w serwerowni, pod kątem prostym (jak koryta
-            kablowe). Ten sam algorytm trasowania co w aplikacji desktop. Auto-projekt to start
-            („mieszany"): projektant koryguje rozmieszczenie, a wytyczne klienta nadpisują reguły.
-            Dalej: walidacja norm, BOM, kosztorys i eksport DXF/XLSX.
+            ściany i biegną przez drzwi do szafy IDF w serwerowni, pod kątem prostym. Grafitowe pasy
+            to <strong>koryta kablowe</strong> (magistrale wyliczone z tras — trafiają do kosztorysu),
+            a kolorowe strefy przy kamerach to <strong>pokrycie DORI wg PN‑EN 62676‑4</strong>{' '}
+            (zielony = identyfikacja, żółty = rozpoznanie, pomarańczowy = obserwacja). Auto-projekt
+            to start („mieszany"): projektant koryguje rozmieszczenie, a wytyczne klienta nadpisują
+            reguły. Dalej: walidacja norm, BOM, kosztorys i eksport DXF/XLSX.
           </p>
         </div>
       </section>

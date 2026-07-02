@@ -120,6 +120,9 @@ export function ImportWizard({ doc, fileName, initial, onConfirm, onCancel }: Im
             <Field label="Skala: mm na jednostkę">
               <input type="number" step="0.0001" className={inp} value={profile.unitMm} onChange={(e) => set('unitMm', Number(e.target.value))} />
             </Field>
+            <Field label="Skala rysunku (tabelka PN)">
+              <input className={inp} value={profile.scaleText} onChange={(e) => set('scaleText', e.target.value)} />
+            </Field>
           </section>
 
           {/* Tryb pracy */}
@@ -212,6 +215,13 @@ export function ImportWizard({ doc, fileName, initial, onConfirm, onCancel }: Im
                 className={inp}
                 value={profile.targetLayers.join(', ')}
                 onChange={(e) => set('targetLayers', e.target.value.split(',').map((s) => s.trim()).filter(Boolean))}
+              />
+            </Field>
+            <Field label="Warstwy drzwi (otwory w ścianach — kabel idzie przez drzwi)">
+              <input
+                className={inp}
+                value={profile.doorLayers.join(', ')}
+                onChange={(e) => set('doorLayers', e.target.value.split(',').map((s) => s.trim()).filter(Boolean))}
               />
             </Field>
           </section>

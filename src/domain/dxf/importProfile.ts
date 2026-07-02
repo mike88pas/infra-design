@@ -24,6 +24,8 @@ export interface ImportProfile {
   units: Units
   /** Ile milimetrów przypada na jednostkę modelu (kalibracja). mm→1, m→1000. */
   unitMm: number
+  /** Skala rysunku do tabelki PN (np. „1:100") — opisowa, nie wpływa na obliczenia. */
+  scaleText: string
 
   // ── Geometria pomieszczeń ──
   /**
@@ -38,6 +40,8 @@ export interface ImportProfile {
   areaLayers: string[]
   /** Tokeny warstw ścian do `polygonize`/trasowania (dopasowanie po podłańcuchu). */
   wallLayers: string[]
+  /** Tokeny warstw drzwi — otwory „przebijają” ściany w routerze (kabel idzie przez drzwi). */
+  doorLayers: string[]
   /** Wejść w bloki INSERT (podkład architektoniczny bywa jednym blokiem). */
   explodeBlocks: boolean
   /** (schedule) Mnożnik pozycji etykiet (zwykle 1.0 — kalibracja idzie przez `unitMm`). */
@@ -108,6 +112,7 @@ export function buildDefaultProfile(input: DefaultProfileInput): ImportProfile {
     level: guessLevel(fileName),
     units: input.units,
     unitMm,
+    scaleText: '1:100',
     roomSource,
     areaLayers: ['AREA'],
     scheduleScale: 1.0,
@@ -115,6 +120,8 @@ export function buildDefaultProfile(input: DefaultProfileInput): ImportProfile {
     scheduleHeaderArea: 'Powierzchnia',
     // Domyślnie tokeny ścian z warstw; gdy brak — generyczny token 'WALL' (łapie A-WALL po eksplozji).
     wallLayers: wall.length ? wall : ['WALL'],
+    // Drzwi: tokeny domyślne łapią A-DOOR / DRZWI po podłańcuchu (otwory w ścianach dla tras).
+    doorLayers: ['DOOR', 'DRZWI'],
     explodeBlocks: true,
     systemMapping: guessSystemMapping(input.layers),
     // Tryb: gdy rysunek ma warstwy urządzeń (PST_…) → odczyt; inaczej projektuj od zera.

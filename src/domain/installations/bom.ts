@@ -82,11 +82,21 @@ export function buildBom(input: BomInput, opts: BomOptions = {}): BomItem[] {
     })
   }
 
-  // Korytka — sumujemy długości tras nośnych po szerokości.
+  // Korytka — sumujemy długości tras nośnych po szerokości, potem zaokrąglamy RAZ
+  // (zaokrąglanie per‑bieg zawyżałoby przy wielu krótkich odcinkach magistrali).
+  const trayMeters = new Map<string, { m: number; refs: string[] }>()
   for (const t of input.trays) {
     const key = trayKey(t.widthMm)
     if (!CATALOG[key]) continue
-    add(key, Math.ceil(polylineLengthM(t.path)), t.id)
+    const acc = trayMeters.get(key) ?? { m: 0, refs: [] }
+    acc.m += polylineLengthM(t.path)
+    acc.refs.push(t.id)
+    trayMeters.set(key, acc)
+  }
+  for (const [key, acc] of trayMeters) {
+    add(key, Math.ceil(acc.m), acc.refs[0])
+    const item = map.get(key)
+    if (item) for (let i = 1; i < acc.refs.length; i++) item.sourceRefs.push(acc.refs[i])
   }
 
   return [...map.values()].sort(

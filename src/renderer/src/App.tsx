@@ -3,7 +3,17 @@ import type { BomItem, Device, DxfDocument, DxfRoom, Point, ProjectBundle, Space
 import { createEmptyBundle, createEmptyProject } from '../../domain/model/schema'
 import { autoDesign } from '../../domain/installations/autodesign'
 import { CadViewer } from '@core/cad/CadViewer'
-import { polygonsToSpaces, type CadScene, type RenderSpace, type RenderDevice, type RenderRoute } from '@core/cad'
+import {
+  polygonsToSpaces,
+  traysToRender,
+  coverageForDevices,
+  type CadScene,
+  type RenderSpace,
+  type RenderDevice,
+  type RenderRoute,
+  type RenderExtras,
+  type SheetInfo
+} from '@core/cad'
 import {
   guessLayerRoles,
   guessWallLayers,
@@ -17,6 +27,8 @@ import type { ImportProfile } from '../../domain/dxf/importProfile'
 import { roomsToSpaces } from '../../domain/dxf/rooms'
 import { devicesFromInserts, countByTypeKey } from '../../domain/installations/fromDxf'
 import { buildBom } from '../../domain/installations/bom'
+import { deriveTrays, trayMetersByWidth } from '../../domain/installations/trays'
+import { applyDoriProps } from '../../domain/installations/cctvCoverage'
 import { buildCost, PLN, type CostSummary } from '../../domain/installations/cost'
 import { buildKosztorys } from '../../domain/installations/kosztorysExport'
 import { buildRacks } from '../../domain/installations/rack'
@@ -38,6 +50,7 @@ interface ImportSummary {
   devices: number
   byType: Record<string, number>
   cableM: number
+  trayM: number
   routedAstar: number
   bom: BomItem[]
   cost: CostSummary
@@ -67,6 +80,7 @@ export default function App(): JSX.Element {
   const [layerVisibility, setLayerVisibility] = useState<Record<string, boolean>>({})
   const [layerRoles, setLayerRoles] = useState<Record<string, LayerRole>>({})
   const [hovered, setHovered] = useState<RenderSpace | null>(null)
+  const [sheet, setSheet] = useState<SheetInfo | null>(null)
 
   const [measured, setMeasured] = useState<number | null>(null)
   const [realInput, setRealInput] = useState('')
@@ -103,6 +117,18 @@ export default function App(): JSX.Element {
     () => (bundle?.routes ?? []).map((r) => ({ id: r.id, system: r.system, path: r.path })),
     [bundle]
   )
+  // Warstwy dodatkowe: strefy pokrycia kamer (DORI) + koryta kablowe (magistrale).
+  // unitMm per rysunek z Drawing.transform[0]; Tray.path jest w mm → helper przelicza.
+  const renderExtras = useMemo<RenderExtras | null>(() => {
+    if (!bundle) return null
+    const unitOf = (drawingId: string): number =>
+      bundle.drawings.find((d) => d.id === drawingId)?.transform[0] ?? 1
+    const unitMm = bundle.drawings[0]?.transform[0] ?? 1
+    return {
+      coverage: coverageForDevices(bundle.devices, bundle.spaces, unitMm),
+      trays: traysToRender(bundle.trays, unitOf)
+    }
+  }, [bundle])
 
   async function ping(): Promise<void> {
     setStatus({ kind: 'idle', text: 'Łączę z sidecarem…' })
@@ -119,6 +145,7 @@ export default function App(): JSX.Element {
   async function newProject(): Promise<void> {
     const b = await window.infra.project.new('Projekt instalacji')
     setBundle(b)
+    setSheet(null)
     setFilePath(undefined)
     setStatus({ kind: 'ok', text: `Utworzono projekt (schema v${b.project.schemaVersion})` })
   }
@@ -168,6 +195,7 @@ export default function App(): JSX.Element {
       const roles = guessLayerRoles(d.layers)
       setLayerRoles(roles)
       setSpaces([])
+      setSheet(null)
       setUnitMm(null)
       setMeasured(null)
       const trunc = d.truncated ? ` (przycięto ${d.truncated})` : ''
@@ -221,6 +249,7 @@ export default function App(): JSX.Element {
       )
       setSpaces([])
       setSummary(null)
+      setSheet(null)
       setWizardOpen(true)
       setStatus({ kind: 'ok', text: 'Potwierdź wartości początkowe w kreatorze' })
     } catch (e) {
@@ -269,6 +298,27 @@ export default function App(): JSX.Element {
           at: centroid(p.points),
           tag: p.points
         }))
+      }
+
+      // Fallback: gdy wybrane źródło nic nie zwróciło (pusta warstwa pól, zły token, brak
+      // tabeli zestawienia) — zrekonstruuj pomieszczenia ze ścian. Lepiej to niż projekt
+      // z 0 pomieszczeń (a stąd 0 urządzeń i 0 zł). Nie dotyczy źródła 'walls' (już próbowane).
+      if (rooms.length === 0 && profile.roomSource !== 'walls') {
+        setStatus({ kind: 'idle', text: 'Źródło pól puste — odtwarzam pomieszczenia ze ścian…' })
+        const poly = await window.infra.dxf.polygonize({
+          path: dxfPath,
+          wallLayers: profile.wallLayers,
+          explodeBlocks: profile.explodeBlocks
+        })
+        if (!(poly as { error?: string }).error && poly.polygons.length) {
+          rooms = poly.polygons.map((p, i) => ({
+            number: '',
+            name: `Pom. ${i + 1}`,
+            areaM2: p.area / 1_000_000,
+            at: centroid(p.points),
+            tag: p.points
+          }))
+        }
       }
       const { spaces: domainSpaces, assign: assignToRoom } = roomsToSpaces(rooms, drawingId)
       const renderSpaces: RenderSpace[] = domainSpaces.map((s) => ({
@@ -321,22 +371,28 @@ export default function App(): JSX.Element {
           sources: devices.map((d) => d.position),
           targets,
           wallLayers: routeWalls,
+          // Otwory drzwiowe „przebijają" ściany — kabel idzie przez drzwi, nie skrótem przez mur.
+          doorLayers: profile.doorLayers,
           explodeBlocks: profile.roomSource === 'schedule' ? false : profile.explodeBlocks
         })
         routedAstar = rc.routes.filter((r) => r.method === 'astar').length
         routes = buildCableRoutes({ devices, routes: rc.routes, unitMm: profile.unitMm, cabinetIds })
       }
 
-      // 4) BOM + kosztorys
-      const bom = buildBom({ devices, routes, trays: [] }, { cableSparePct: profile.cableSparePct })
+      // 4) Koryta nośne (backbone z tras: wspólne odcinki ≥2 kable) → BOM + kosztorys.
+      const trays = deriveTrays(routes, profile.unitMm, { drawingId, level: profile.level })
+      const bom = buildBom({ devices, routes, trays }, { cableSparePct: profile.cableSparePct })
       const cost = buildCost(bom, { overheadPct: profile.overheadPct, vatPct: profile.vatPct })
 
-      // 4b) Audyt norm — długość kanału LAN ≤ 90 m (mamy długości z A*).
-      // DORI pomijamy do czasu modelu pokrycia kamer (F4) — inaczej fałszywe ostrzeżenia.
-      const rules = INSTALLATION_RULES.filter((r) => r.id !== 'cctv.dori.target')
+      // 4a) DORI (PN-EN 62676-4): wzbogać kamery o mp/fov/doriTarget + worst-case px/m
+      // w ich pomieszczeniu — dopiero wtedy reguła cctv.dori.target ma realne dane.
+      devices = applyDoriProps(devices, domainSpaces, profile.unitMm)
+
+      // 4b) Audyt norm — kanał LAN ≤ 90 m (PN-EN 50173), wypełnienie koryt ≤ 40%
+      // (PN-EN 61537), pokrycie kamer DORI (PN-EN 62676-4).
       const validations = runAudit(
-        { devices, routes, trays: [], circuits: [] } as unknown as ProjectBundle,
-        rules
+        { devices, routes, trays, circuits: [] } as unknown as ProjectBundle,
+        INSTALLATION_RULES
       )
       const failed = validations.filter((v) => v.status === 'fail')
       const audit = {
@@ -346,8 +402,9 @@ export default function App(): JSX.Element {
       }
 
       // 5) Persystencja do bundla (utwórz, jeśli brak)
-      persistImport(profile, drawingId, domainSpaces, devices, routes, bom, cost, validations)
+      persistImport(profile, drawingId, domainSpaces, devices, routes, trays, bom, cost, validations)
 
+      const trayM = Object.values(trayMetersByWidth(trays)).reduce((s, m) => s + m, 0)
       const cableM = routes.reduce((s, r) => s + r.length, 0)
       const roomAreaM2 = domainSpaces.reduce((s, sp) => s + sp.area, 0) / 1_000_000
       setSummary({
@@ -357,10 +414,21 @@ export default function App(): JSX.Element {
         devices: devices.length,
         byType: countByTypeKey(devices),
         cableM,
+        trayM,
         routedAstar,
         bom,
         cost,
         audit
+      })
+      // Metryczka rysunku (ramka + tabelka PN); skala z kreatora (pole „Skala rysunku").
+      // Software NIE autoryzuje projektu — tabelka zostawia miejsce na podpis projektanta.
+      setSheet({
+        projectName: profile.projectName || profile.drawingName || 'Projekt instalacji',
+        drawingName: profile.drawingName || `Instalacje — kondygnacja ${profile.level}`,
+        client: profile.client || undefined,
+        level: profile.level,
+        scaleText: profile.scaleText || '1:100',
+        date: new Date().toISOString().slice(0, 10)
       })
       setStatus({
         kind: 'ok',
@@ -378,6 +446,7 @@ export default function App(): JSX.Element {
     domainSpaces: Space[],
     devices: Device[],
     routes: ReturnType<typeof buildCableRoutes>,
+    trays: ReturnType<typeof deriveTrays>,
     bom: BomItem[],
     cost: CostSummary,
     validations: ReturnType<typeof runAudit>
@@ -397,6 +466,7 @@ export default function App(): JSX.Element {
       const keepSpace = base.spaces.filter((s) => s.drawingId !== drawingId)
       const keepDev = base.devices.filter((d) => d.drawingId !== drawingId)
       const keepRoute = base.routes.filter((r) => !r.id.startsWith(`route-L${profile.level}-`))
+      const keepTray = base.trays.filter((t) => t.drawingId !== drawingId)
       const drawing = {
         id: drawingId,
         projectId: base.project.id,
@@ -419,6 +489,7 @@ export default function App(): JSX.Element {
         spaces: [...keepSpace, ...domainSpaces],
         devices: allDevices,
         routes: [...keepRoute, ...routes],
+        trays: [...keepTray, ...trays],
         racks,
         bom,
         costs: cost.items,
@@ -437,6 +508,16 @@ export default function App(): JSX.Element {
     try {
       const devices = bundle.devices.map((d) => ({ system: d.system, typeKey: d.typeKey, position: d.position }))
       const routes = bundle.routes.map((r) => ({ path: r.path, system: r.system }))
+      // Koryta: Tray.path jest w mm → przelicz na jednostki modelu rysunku (jak devices/routes).
+      const unitOfDrawing = (id: string): number => bundle.drawings.find((d) => d.id === id)?.transform[0] ?? 1
+      const trays = bundle.trays.map((t) => {
+        const u = unitOfDrawing(t.drawingId) || 1
+        return {
+          path: t.path.map((p) => ({ x: p.x / u, y: p.y / u })),
+          widthDraw: t.widthMm / u,
+          widthMm: t.widthMm
+        }
+      })
       const rooms = bundle.spaces
         .filter((s) => s.polygon.length)
         .map((s) => ({ name: s.name, at: centroid(s.polygon) }))
@@ -460,6 +541,7 @@ export default function App(): JSX.Element {
       const res = await window.infra.dxf.export({
         devices,
         routes,
+        trays,
         rooms,
         cabinets,
         legend,
@@ -703,6 +785,8 @@ export default function App(): JSX.Element {
               spaces={spaces}
               devices={renderDevices}
               routes={renderRoutes}
+              sheet={sheet}
+              extras={renderExtras}
               layerVisibility={layerVisibility}
               onHoverSpace={setHovered}
               onReady={(s) => (sceneRef.current = s)}
@@ -731,6 +815,7 @@ export default function App(): JSX.Element {
                 <span>Pomieszczeń: <b className="text-accent">{summary.spaces}</b></span>
                 <span>Pow.: <b className="text-accent">{summary.roomAreaM2.toFixed(0)} m²</b></span>
                 <span>Kabel: <b className="text-accent">{Math.round(summary.cableM)} m</b></span>
+                <span>Koryta: <b className="text-accent">{Math.round(summary.trayM)} m</b></span>
               </div>
               {summary.cableM > 0 && (
                 <p className="mb-1 text-[10px] text-slate-500">Trasy A*: {summary.routedAstar}/{summary.devices}</p>

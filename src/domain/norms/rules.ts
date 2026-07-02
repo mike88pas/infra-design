@@ -34,11 +34,24 @@ export const INSTALLATION_RULES: NormRule[] = [
     severity: 'warn',
     reference: 'PN-EN 62676-4 — kryteria DORI',
     message: 'Kamera nie osiąga zadeklarowanego poziomu DORI w strefie',
+    // doriResolutionPxM liczy applyDoriProps (worst-case px/m w pomieszczeniu kamery);
+    // 0 = brak danych (kamera bez pomieszczenia) → exempt, żeby nie generować fałszywych alarmów.
     predicate: {
-      kind: 'cmp',
-      op: '>=',
-      left: { kind: 'call', fn: 'dori', args: [{ kind: 'field', path: 'device' }] },
-      right: { kind: 'field', path: 'device.props.doriTarget' }
+      kind: 'or',
+      items: [
+        {
+          kind: 'cmp',
+          op: '==',
+          left: { kind: 'field', path: 'device.props.doriResolutionPxM' },
+          right: { kind: 'const', value: 0 }
+        },
+        {
+          kind: 'cmp',
+          op: '>=',
+          left: { kind: 'call', fn: 'dori', args: [{ kind: 'field', path: 'device' }] },
+          right: { kind: 'field', path: 'device.props.doriTarget' }
+        }
+      ]
     }
   },
   {

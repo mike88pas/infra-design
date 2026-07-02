@@ -8,13 +8,24 @@
 
 import { useEffect, useRef } from 'react'
 import type { DxfDocument } from '@domain/model/schema'
-import { CadScene, type RenderSpace, type RenderDevice, type RenderRoute } from './'
+import {
+  CadScene,
+  type RenderSpace,
+  type RenderDevice,
+  type RenderRoute,
+  type RenderExtras,
+  type SheetInfo
+} from './'
 
 export interface CadViewerProps {
   doc: DxfDocument | null
   spaces: RenderSpace[]
   devices?: RenderDevice[]
   routes?: RenderRoute[]
+  /** Metryczka rysunku (ramka + tabelka PN). */
+  sheet?: SheetInfo | null
+  /** Dodatkowe warstwy: strefy pokrycia kamer (DORI), koryta kablowe. */
+  extras?: RenderExtras | null
   layerVisibility?: Record<string, boolean>
   onHoverSpace?: (s: RenderSpace | null) => void
   onReady?: (scene: CadScene) => void
@@ -26,6 +37,8 @@ export function CadViewer({
   spaces,
   devices,
   routes,
+  sheet,
+  extras,
   layerVisibility,
   onHoverSpace,
   onReady,
@@ -35,8 +48,8 @@ export function CadViewer({
   const sceneRef = useRef<CadScene | null>(null)
   const readyRef = useRef(false)
   // Najświeższe dane/callbacki bez retriggerowania montażu sceny.
-  const latest = useRef({ doc, spaces, devices, routes, layerVisibility, onHoverSpace, onReady })
-  latest.current = { doc, spaces, devices, routes, layerVisibility, onHoverSpace, onReady }
+  const latest = useRef({ doc, spaces, devices, routes, sheet, extras, layerVisibility, onHoverSpace, onReady })
+  latest.current = { doc, spaces, devices, routes, sheet, extras, layerVisibility, onHoverSpace, onReady }
 
   // Po każdym load trzeba na nowo nałożyć widoczność warstw (load tworzy je od zera).
   function applyVisibility(): void {
@@ -59,7 +72,14 @@ export function CadViewer({
       readyRef.current = true
       latest.current.onReady?.(scene)
       if (latest.current.doc) {
-        scene.load(latest.current.doc, latest.current.spaces, latest.current.devices, latest.current.routes)
+        scene.load(
+          latest.current.doc,
+          latest.current.spaces,
+          latest.current.devices,
+          latest.current.routes,
+          latest.current.sheet,
+          latest.current.extras
+        )
         applyVisibility()
       }
     })
@@ -74,10 +94,10 @@ export function CadViewer({
   // Przeładowanie danych (po load ponownie nakładamy widoczność warstw).
   useEffect(() => {
     if (readyRef.current && sceneRef.current && doc) {
-      sceneRef.current.load(doc, spaces, devices, routes)
+      sceneRef.current.load(doc, spaces, devices, routes, sheet, extras)
       applyVisibility()
     }
-  }, [doc, spaces, devices, routes])
+  }, [doc, spaces, devices, routes, sheet, extras])
 
   // Synchronizacja widoczności warstw.
   useEffect(() => {

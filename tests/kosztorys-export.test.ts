@@ -76,6 +76,18 @@ describe('buildKosztorys — format inwestorski', () => {
     expect(k.total.netto).toBeCloseTo(sumNet, 1)
     expect(k.total.brutto).toBeCloseTo(k.total.netto * 1.23, 1)
   })
+
+  it('koryta (Tray) trafiają do kategorii Pasywne z dodatnim Netto', () => {
+    const withTray = buildKosztorys(
+      [...BOM, { id: 'bom.tray.perforated.100', catalogRef: 'tray.perforated.100', description: 'Korytko 100', qty: 42, unit: 'm', system: 'tray', sourceRefs: [] }],
+      { vatPct: 23 }
+    )
+    const pas = withTray.categories.find((c) => c.key === 'pasywne')!
+    const tray = pas.kosztorys.find((r) => r.sku === 'KCJ100')
+    expect(tray).toBeTruthy()
+    expect(tray!.qty).toBe(42)
+    expect(tray!.netto).toBeGreaterThan(0)
+  })
 })
 
 // ── Kontrakt eksportu XLSX (sidecar) ────────────────────────────────────────

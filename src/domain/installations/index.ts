@@ -15,10 +15,13 @@ export const LAN_DEVICE_TYPES: DeviceTypeDef[] = [
   { typeKey: 'lan.ap', system: 'lan', label: 'Access Point (PoE)', symbol: 'lan-ap', defaultProps: { poe: true } }
 ]
 
-/** Typy urządzeń CCTV (gotowe pod F4; props pod regułę DORI). */
+/** Typy urządzeń CCTV (F4; props pod regułę DORI — PN-EN 62676-4).
+ * doriTarget wg praktyki dozoru ogólnego: dome = observation (62,5 px/m) w całym pomieszczeniu,
+ * bullet = recognition (125 px/m); identification (250) jako świadomy override per urządzenie.
+ * doriResolutionPxM liczy `applyDoriProps` (worst-case px/m w pomieszczeniu; 0 = brak danych). */
 export const CCTV_DEVICE_TYPES: DeviceTypeDef[] = [
-  { typeKey: 'cctv.dome.4mp', system: 'cctv', label: 'Kamera kopułkowa 4 Mpx', symbol: 'cctv-dome', defaultProps: { mp: 4, fov: 110, doriTarget: 125, doriResolutionPxM: 0 } },
-  { typeKey: 'cctv.bullet.4mp', system: 'cctv', label: 'Kamera tubowa 4 Mpx', symbol: 'cctv-bullet', defaultProps: { mp: 4, fov: 90, doriTarget: 250, doriResolutionPxM: 0 } }
+  { typeKey: 'cctv.dome.4mp', system: 'cctv', label: 'Kamera kopułkowa 4 Mpx', symbol: 'cctv-dome', defaultProps: { mp: 4, fov: 110, doriTarget: 62.5, doriResolutionPxM: 0 } },
+  { typeKey: 'cctv.bullet.4mp', system: 'cctv', label: 'Kamera tubowa 4 Mpx', symbol: 'cctv-bullet', defaultProps: { mp: 4, fov: 90, doriTarget: 125, doriResolutionPxM: 0 } }
 ]
 
 /** Definicja wertykały instalacji do rejestracji w core. */
