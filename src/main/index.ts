@@ -320,6 +320,8 @@ function registerIpc(): void {
         sources: { x: number; y: number }[]
         targets: { x: number; y: number }[]
         wallLayers?: string[]
+        doorLayers?: string[]
+        doorClear?: number
         explodeBlocks?: boolean
         cell?: number
         inflate?: number

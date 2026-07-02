@@ -64,6 +64,8 @@ const api = {
       sources: { x: number; y: number }[]
       targets: { x: number; y: number }[]
       wallLayers?: string[]
+      doorLayers?: string[]
+      doorClear?: number
       explodeBlocks?: boolean
       cell?: number
       inflate?: number
@@ -71,6 +73,7 @@ const api = {
     export: (params: {
       devices: Array<{ system: string; typeKey: string; position: { x: number; y: number } }>
       routes: Array<{ path: { x: number; y: number }[]; system: string }>
+      trays?: Array<{ path: { x: number; y: number }[]; widthDraw: number; widthMm: number }>
       rooms: Array<{ name: string; at: { x: number; y: number } }>
       cabinets: { x: number; y: number }[]
       legend: Array<{ label: string; count: number }>

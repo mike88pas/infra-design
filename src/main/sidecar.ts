@@ -233,6 +233,7 @@ export class SidecarBridge {
     path: string
     devices: Array<{ system: string; typeKey: string; position: Pt }>
     routes: Array<{ path: Pt[]; system: string }>
+    trays?: Array<{ path: Pt[]; widthDraw: number; widthMm: number }>
     rooms: Array<{ name: string; at: Pt }>
     cabinets: Pt[]
     legend: Array<{ label: string; count: number }>
@@ -268,6 +269,8 @@ export class SidecarBridge {
     sources: Pt[]
     targets: Pt[]
     wallLayers?: string[]
+    doorLayers?: string[]
+    doorClear?: number
     explodeBlocks?: boolean
     cell?: number
     inflate?: number

@@ -819,10 +819,13 @@ def _extract_rooms_schedule(params):
 _ROUTE_MAX_CELLS_SIDE = 220
 
 
-def _dijkstra_multi(seeds, blocked, w, h):
+def _dijkstra_multi(seeds, blocked, w, h, ortho=True):
     """Multi-source Dijkstra od celów (szaf) po całej wolnej siatce — JEDNO przejście.
     seeds: list[(targetIndex, (gx,gy))]. Zwraca (dist, parent, origin) per komórka.
     Każde urządzenie odczytuje potem swój koszt i trasę backtrace — bez N osobnych A*.
+
+    `ortho=True` (domyślnie): 4-sąsiedztwo — kable pod kątem prostym, jak realne koryta/trasy
+    kablowe (czysty rysunek + policzalne koryta). `ortho=False`: 8-sąsiedztwo (skróty po skosie).
     """
     import heapq
 
@@ -838,7 +841,10 @@ def _dijkstra_multi(seeds, blocked, w, h):
             parent[c] = None
             origin[c] = idx
             heapq.heappush(heap, (0.0, c))
-    nbrs = ((1, 0), (-1, 0), (0, 1), (0, -1), (1, 1), (1, -1), (-1, 1), (-1, -1))
+    if ortho:
+        nbrs = ((1, 0), (-1, 0), (0, 1), (0, -1))
+    else:
+        nbrs = ((1, 0), (-1, 0), (0, 1), (0, -1), (1, 1), (1, -1), (-1, 1), (-1, -1))
     while heap:
         d, cur = heapq.heappop(heap)
         if d > dist.get(cur, float("inf")):
@@ -858,6 +864,22 @@ def _dijkstra_multi(seeds, blocked, w, h):
                 origin[nb] = origin[cur]
                 heapq.heappush(heap, (nd, nb))
     return dist, parent, origin
+
+
+def _simplify_cells(cells):
+    """Usuwa środkowe komórki współliniowych biegów → polilinia tylko z punktami załamań."""
+    if len(cells) <= 2:
+        return cells
+    out = [cells[0]]
+    for i in range(1, len(cells) - 1):
+        ax, ay = cells[i - 1]
+        bx, by = cells[i]
+        cx, cy = cells[i + 1]
+        if (bx - ax, by - ay) == (cx - bx, cy - by):
+            continue  # ten sam kierunek — punkt pośredni pomijamy
+        out.append(cells[i])
+    out.append(cells[-1])
+    return out
 
 
 @handler("route_cables")
@@ -889,6 +911,9 @@ def _route_cables(params):
 
     wall_layers = params.get("wallLayers")
     wall_set = set(wall_layers) if wall_layers else None
+    door_layers = params.get("doorLayers")
+    door_set = set(door_layers) if door_layers else None
+    door_clear = int(params.get("doorClear", 2))
     explode = params.get("explodeBlocks", True)
     inflate = int(params.get("inflate", 0))
 
@@ -921,6 +946,30 @@ def _route_cables(params):
                     pts = pts + [pts[0]]
                 for i in range(len(pts) - 1):
                     segments.append((pts[i], pts[i + 1]))
+
+    # Otwory drzwiowe: geometria drzwi (do "przebicia" w ścianach po rasteryzacji),
+    # żeby kabel przeszedł przez drzwi, a nie skrótem przez mur.
+    door_segments = []
+    if door_set is not None:
+        for e in msp:
+            for geom in _iter_wall_geometry(e, explode):
+                if not _layer_matches(getattr(geom.dxf, "layer", "0"), door_set):
+                    continue
+                t = geom.dxftype()
+                if t == "LINE":
+                    a, b = geom.dxf.start, geom.dxf.end
+                    door_segments.append(((a.x, a.y), (b.x, b.y)))
+                else:
+                    if t == "LWPOLYLINE":
+                        pts = [(x, y) for x, y in geom.get_points("xy")]
+                        closed = bool(geom.closed)
+                    else:
+                        pts = [(v.dxf.location.x, v.dxf.location.y) for v in geom.vertices]
+                        closed = bool(geom.is_closed)
+                    if closed and len(pts) > 2:
+                        pts = pts + [pts[0]]
+                    for i in range(len(pts) - 1):
+                        door_segments.append((pts[i], pts[i + 1]))
 
     minx, miny = bbox.minx, bbox.miny
     width = max(bbox.maxx - minx, 1.0)
@@ -955,13 +1004,28 @@ def _route_cables(params):
                     extra.add((cx + dx, cy + dy))
         blocked = extra
 
+    # Przebij otwory drzwiowe: usuń komórki drzwi (z marginesem door_clear) z przeszkód.
+    # Robione PO inflate, by pogrubienie ścian nie zasklepiło z powrotem przejścia.
+    if door_segments:
+        clear = set()
+        for (ax, ay), (bx, by) in door_segments:
+            steps = int((abs(bx - ax) + abs(by - ay)) / cell) + 1
+            for i in range(steps + 1):
+                tt = i / steps
+                dcx, dcy = to_cell_xy(ax + (bx - ax) * tt, ay + (by - ay) * tt)
+                for dx in range(-door_clear, door_clear + 1):
+                    for dy in range(-door_clear, door_clear + 1):
+                        clear.add((dcx + dx, dcy + dy))
+        blocked -= clear
+
     # Jedno przejście Dijkstry od wszystkich szaf po wolnej siatce.
     seeds = []
     for ti, t in enumerate(targets):
         tc = to_cell(t)
         seeds.append((ti, tc if tc not in blocked else _nearest_free(tc, blocked, w, h)))
     seeds = [(ti, c) for ti, c in seeds if c is not None]
-    dist, parent, origin = _dijkstra_multi(seeds, blocked, w, h)
+    ortho = params.get("ortho", True)
+    dist, parent, origin = _dijkstra_multi(seeds, blocked, w, h, ortho=ortho)
 
     def to_point(c):
         return {"x": minx + (c[0] + 0.5) * cell, "y": miny + (c[1] + 0.5) * cell}
@@ -977,6 +1041,7 @@ def _route_cables(params):
                 cur = parent[cur]
                 cells.append(cur)
             length = dist[start] * cell
+            cells = _simplify_cells(cells)  # tylko punkty załamań → czysta polilinia
             routes.append({
                 "sourceIndex": si, "targetIndex": origin[start],
                 "path": [to_point(c) for c in cells], "length": length, "method": "astar",
@@ -1014,7 +1079,8 @@ def _nearest_free(cell, blocked, w, h, max_r=8):
 # Warstwy rysunku instalacji (nazwa → kolor ACI).
 _EXPORT_LAYERS = {
     "INSTAL-LAN": 5, "INSTAL-CCTV": 1, "INSTAL-KD": 3, "INSTAL-AP": 4,
-    "INSTAL-TRASY": 8, "INSTAL-SZAFY": 2, "INSTAL-OPIS": 7, "INSTAL-LEGENDA": 7,
+    "INSTAL-TRASY": 8, "INSTAL-KORYTA": 251, "INSTAL-SZAFY": 2, "INSTAL-OPIS": 7,
+    "INSTAL-LEGENDA": 7,
 }
 
 
@@ -1048,13 +1114,14 @@ def _export_dxf(params):
         "path": str,                         # plik wyjściowy .dxf
         "devices": [{system,typeKey,position:{x,y}}],
         "routes": [{path:[{x,y}], system}],
+        "trays": [{path:[{x,y}], widthDraw, widthMm}]?,  # koryta (magistrale)
         "rooms": [{name, at:{x,y}}],
         "cabinets": [{x,y}],
         "legend": [{label, count}],
         "meta": {project, drawing, designer, license},
         "symbolSize": float?                 # połowa boku symbolu (domyślnie 250 mm)
     }
-    return: { path, devices, routes }
+    return: { path, devices, routes, trays }
     """
     import ezdxf  # type: ignore
     import safepath
@@ -1062,6 +1129,7 @@ def _export_dxf(params):
     out = safepath.validate_out_path(params.get("path"), params.get("_allowedRoots"))
     devices = params.get("devices", [])
     routes = params.get("routes", [])
+    trays = params.get("trays", []) or []
     rooms = params.get("rooms", [])
     cabinets = params.get("cabinets", [])
     legend = params.get("legend", [])
@@ -1076,6 +1144,36 @@ def _export_dxf(params):
             doc.layers.add(name, color=color)
 
     bbox = _BBox()
+
+    # Koryta kablowe (najgłębiej — magistrale pod trasami). LWPOLYLINE z natywną
+    # szerokością (const_width) + etykieta "KORYTO {mm}" wzdłuż najdłuższego segmentu.
+    import math as _math
+    for t in trays:
+        pts = [(q["x"], q["y"]) for q in t.get("path", [])]
+        if len(pts) < 2:
+            continue
+        attribs = {"layer": "INSTAL-KORYTA"}
+        w = float(t.get("widthDraw", 0) or 0)
+        if w > 0:
+            attribs["const_width"] = w
+        msp.add_lwpolyline(pts, dxfattribs=attribs)
+        # najdłuższy segment → środek + kąt etykiety
+        bi, bl = 0, -1.0
+        for i in range(len(pts) - 1):
+            L = _math.hypot(pts[i + 1][0] - pts[i][0], pts[i + 1][1] - pts[i][1])
+            if L > bl:
+                bl, bi = L, i
+        mx = (pts[bi][0] + pts[bi + 1][0]) / 2
+        my = (pts[bi][1] + pts[bi + 1][1]) / 2
+        ang = _math.degrees(_math.atan2(pts[bi + 1][1] - pts[bi][1], pts[bi + 1][0] - pts[bi][0]))
+        if ang > 90 or ang < -90:
+            ang += 180  # tekst zawsze "do góry nogami" → obróć
+        msp.add_text(
+            f"KORYTO {int(t.get('widthMm', 0))}", height=s * 0.9,
+            dxfattribs={"layer": "INSTAL-KORYTA", "rotation": ang},
+        ).set_placement((mx, my))
+        for x, y in pts:
+            bbox.add(x, y)
 
     # Trasy (pod spodem)
     for r in routes:
@@ -1133,7 +1231,7 @@ def _export_dxf(params):
             row -= lh
 
     doc.saveas(out)
-    return {"path": out, "devices": len(devices), "routes": len(routes)}
+    return {"path": out, "devices": len(devices), "routes": len(routes), "trays": len(trays)}
 
 
 @handler("export_kosztorys")
