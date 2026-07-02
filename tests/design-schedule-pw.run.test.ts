@@ -7,7 +7,7 @@
  *
  *   INFRA_PYTHON=...python.exe \
  *   INFRA_DESIGN_DXF_DIR="C:\\...\\DXF" \
- *   npx vitest run tests/design-uniwersytet.run.test.ts
+ *   npx vitest run tests/design-schedule-pw.run.test.ts
  *
  * Wejście pomieszczeń: TABELA „Zestawienie" + etykiety-numery (extract_rooms_schedule),
  * bo plik nie ma warstw pól ani PST_*. Kalibracja 1:100 → unitMm=100 (1 jedn.=100 mm).

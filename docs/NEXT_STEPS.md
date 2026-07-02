@@ -10,7 +10,7 @@ Ten plik = punkt startu dla osoby/instancji przejmującej projekt. Czytaj w kole
 - **F2 ukończone** (`src/domain/installations/`): w obie strony —
   - **Ekstrakcja** z realnego rzutu (`PST_*` → urządzenia → BOM → kosztorys → audyt norm),
   - **Forward-design** „od zera" (`autodesign.ts`: z wykazu pomieszczeń generuje LAN+CCTV),
-  - **Realny katalog** (Fibrain/Ubiquiti/Hikvision/ZPAS), walidacja PN-EN 50173, **eksport DXF**.
+  - **Realny katalog** producentów (`catalog.ts`), walidacja PN-EN 50173, **eksport DXF**.
   - Kreator importu (`ImportWizard.tsx`) ma tryb **extract / autodesign**.
 - **BEZPIECZEŃSTWO (produkcja desktop-local, NDA)** — patrz `docs/SECURITY.md`:
   - Brama hasła (scrypt) + szyfrowanie `.infra` at-rest (AES-256-GCM, `src/main/crypto/`).
@@ -42,14 +42,14 @@ Ten plik = punkt startu dla osoby/instancji przejmującej projekt. Czytaj w kole
 
 ## Kosztorys inwestorski (XLSX) + elewacja szaf (faza „działająca wersja")
 Na bazie realnych projektów SOS klienta (różne typy obiektów: użyteczności publicznej /
-hotelowe / przemysłowe — kosztorysy Fibrain/Alcatel,
+hotelowe / przemysłowe — realne kosztorysy referencyjne,
 rysunki „Widok szaf"). Pliki referencyjne **poza repo**: `~/Documents/InfraDesign/_reference/`
 (NDA — w repo tylko generyczny katalog: SKU+nazwa+cena+kategoria).
 - **Realny katalog** (`src/domain/installations/catalog.ts`): `CatalogEntry` ma `category`
   (`pasywne|aktywne|telefony`), `uSize` (pozycje rackowe) i `components` — rozkład „logicznej"
   pozycji na realne SKU (gniazdo → `GIP-2`+`SUP-2`+`RAM-2`+2×`XR200`+`XB-45KA45D-02`; panel →
   `XPS00`+`XMS00`+24×`XR200`; szafa → `SRS-42`+`CKS`+`WTD-4T`+`PDU`+organizery). AP/switch =
-  Alcatel‑Lucent (`OAW-AP1301H-RW`, `OS6560-P24X4-EU`).
+  z realnego katalogu (`OAW-AP1301H-RW`, `OS6560-P24X4-EU`).
 - **Kosztorys/Zestawienie** (`src/domain/installations/kosztorysExport.ts`, `buildKosztorys`):
   BOM → dekompozycja na SKU + dopełnienie infrastruktury (przełącznice/switche/szafy z liczby
   portów) → grupy Pasywne/Aktywne/Telefony, **Lp ciągłe**, `Netto=Ilość×Cena`, `Brutto=Netto×1,23`.
@@ -160,4 +160,4 @@ SAP, DSO, BMS) z typami urządzeń, normami, kalkulatorami i schematami: `docs/S
 ## Potrzebne od klienta
 - ✅ Realny DXF (klient referencyjny) — był; teraz drugi projekt **do zaprojektowania od zera**.
 - Przykładowy **plik kosztorysu ATH** (reverse-engineering eksportu) + program (Norma/Zuzia/Rodos).
-- Potwierdzenie **katalogów/producentów** (mamy realne ceny Fibrain/Ubiquiti/Hikvision/ZPAS).
+- Potwierdzenie **katalogów/producentów** (mamy realne ceny w `catalog.ts`).

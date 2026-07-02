@@ -50,7 +50,7 @@ commituj plików klienta (*.dxf/*.dwg/*.infra) ani realnych danych do `web/`.
 - **Ekstrakcja** z realnego rzutu (warstwy `PST_*` → urządzenia → BOM/kosztorys/audyt norm).
 - **Forward-design** („od zera"): `autodesign.ts` z wykazu pomieszczeń generuje LAN+CCTV wg reguł
   (1 gniazdo/10 m², AP≥30 m², kamera≥40 m²) + szafa IDF; reguły nadpisywalne wytycznymi.
-- **Realny katalog** producentów (FibrainDATA, Ubiquiti, Hikvision, ZPAS) z cenami PL netto.
+- **Realny katalog** producentów z cenami PL netto (SKU + ceny w `catalog.ts`).
 - **Walidacja norm** w UI: PN-EN 50173 (kanał LAN ≤90 m). DORI → F4.
 - **Eksport DXF** (`export_dxf`): symbole per system, trasy, legenda — overlay (docelowo XREF).
 
@@ -58,7 +58,7 @@ commituj plików klienta (*.dxf/*.dwg/*.infra) ani realnych danych do `web/`.
 `~/Documents/InfraDesign/_reference/`, poza repo, NDA). Patrz `docs/NEXT_STEPS.md` + pamięć
 [[real-catalog-kosztorys-format]]:
 - **Realny katalog rozszerzony** (`catalog.ts`): `category` (pasywne/aktywne/telefony), `uSize`,
-  `components` — rozkład pozycji na realne SKU (Fibrain keystone + Alcatel‑Lucent OmniSwitch/Stellar).
+  `components` — rozkład pozycji na realne SKU (keystone/panele + switche/AP z katalogu).
 - **Eksport kosztorysu/zestawienia do XLSX** w formacie inwestorskim klienta
   (`kosztorysExport.ts` + sidecar `export_kosztorys` openpyxl): arkusze Kosztorys/Zestawienie per
   kategoria + CAŁOŚĆ, `Lp|Towar|Ilość|Cena|Waluta|Netto|Brutto|Nazwa`, Brutto=Netto×1,23.
