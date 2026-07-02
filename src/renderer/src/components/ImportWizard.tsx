@@ -139,14 +139,49 @@ export function ImportWizard({ doc, fileName, initial, onConfirm, onCancel }: Im
               </label>
             </div>
             {profile.mode === 'autodesign' && (
-              <Field label="Gęstość LAN: 1 gniazdo 2×RJ45 na ile m²">
-                <input
-                  type="number"
-                  className={inp}
-                  value={profile.autoM2PerOutlet}
-                  onChange={(e) => set('autoM2PerOutlet', Number(e.target.value))}
-                />
-              </Field>
+              <div className="grid grid-cols-2 gap-2">
+                <Field label="LAN: 1 gniazdo 2×RJ45 na ile m²">
+                  <input
+                    type="number"
+                    className={inp}
+                    value={profile.autoM2PerOutlet}
+                    onChange={(e) => set('autoM2PerOutlet', Number(e.target.value))}
+                  />
+                </Field>
+                <Field label="Wi-Fi: 1 AP na ile m²">
+                  <input
+                    type="number"
+                    className={inp}
+                    value={profile.autoM2PerAp}
+                    onChange={(e) => set('autoM2PerAp', Number(e.target.value))}
+                  />
+                </Field>
+                <Field label="AP tylko w pomieszczeniach ≥ m²">
+                  <input
+                    type="number"
+                    className={inp}
+                    value={profile.autoApMinM2}
+                    onChange={(e) => set('autoApMinM2', Number(e.target.value))}
+                  />
+                </Field>
+                <Field label="Kamera gdy pomieszczenie ≥ m²">
+                  <input
+                    type="number"
+                    className={inp}
+                    value={profile.autoCamMinM2}
+                    onChange={(e) => set('autoCamMinM2', Number(e.target.value))}
+                  />
+                </Field>
+                <div className="col-span-2">
+                  <Field label="Kamera także wg nazwy pomieszczenia (słowa kluczowe, po przecinku)">
+                    <input
+                      className={inp}
+                      value={profile.autoCamKeywords.join(', ')}
+                      onChange={(e) => set('autoCamKeywords', e.target.value.split(',').map((s) => s.trim()).filter(Boolean))}
+                    />
+                  </Field>
+                </div>
+              </div>
             )}
           </section>
 

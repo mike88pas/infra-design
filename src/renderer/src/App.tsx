@@ -340,7 +340,12 @@ export default function App(): JSX.Element {
           idPrefix: `L${profile.level}`,
           // Odstęp urządzeń ~0.8 m w jednostkach modelu (800 mm / mm-na-jednostkę).
           spacing: 800 / profile.unitMm,
-          rules: { lan: { m2PerOutlet: profile.autoM2PerOutlet, minPerRoom: 1 } }
+          // Wytyczne klienta z kreatora nadpisują domyślne reguły (gniazda/AP/kamery).
+          rules: {
+            lan: { m2PerOutlet: profile.autoM2PerOutlet, minPerRoom: 1 },
+            ap: { m2PerAp: profile.autoM2PerAp, minRoomArea: profile.autoApMinM2 },
+            cctv: { minRoomArea: profile.autoCamMinM2, nameKeywords: profile.autoCamKeywords }
+          }
         })
         devices = ad.devices
         targets = ad.cabinets.map((c) => c.at)

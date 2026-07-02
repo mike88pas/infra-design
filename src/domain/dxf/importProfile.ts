@@ -56,6 +56,14 @@ export interface ImportProfile {
   mode: 'extract' | 'autodesign'
   /** Auto-design: gęstość gniazd LAN (1 gniazdo 2×RJ45 na N m²). */
   autoM2PerOutlet: number
+  /** Auto-design: 1 AP na N m² (w pomieszczeniach ≥ autoApMinM2). */
+  autoM2PerAp: number
+  /** Auto-design: AP tylko w pomieszczeniach ≥ N m². */
+  autoApMinM2: number
+  /** Auto-design: kamera gdy pomieszczenie ≥ N m² (lub nazwa-klucz). */
+  autoCamMinM2: number
+  /** Auto-design: słowa kluczowe nazw pomieszczeń z kamerą (wejście, hol, korytarz…). */
+  autoCamKeywords: string[]
   /** Warstwa → system/typ urządzenia (null = pomiń). Do potwierdzenia w UI (tryb extract). */
   systemMapping: LayerSystemMap
 
@@ -127,6 +135,11 @@ export function buildDefaultProfile(input: DefaultProfileInput): ImportProfile {
     // Tryb: gdy rysunek ma warstwy urządzeń (PST_…) → odczyt; inaczej projektuj od zera.
     mode: Object.values(guessSystemMapping(input.layers)).some((m) => m !== null) ? 'extract' : 'autodesign',
     autoM2PerOutlet: 10,
+    // Reguły AP/CCTV — spójne z DEFAULT_AUTODESIGN_RULES; wytyczne klienta nadpisują w kreatorze.
+    autoM2PerAp: 100,
+    autoApMinM2: 30,
+    autoCamMinM2: 40,
+    autoCamKeywords: ['wejśc', 'wejsc', 'foyer', 'hol', 'korytarz', 'scena', 'magazyn', 'recepcj', 'klatka'],
     doRouting: true,
     targetLayers: ['szaf', 'rack'],
     cableSparePct: 5,
